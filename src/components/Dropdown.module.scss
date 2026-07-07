@@ -1,0 +1,197 @@
+.dropdownContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  position: relative;
+  width: 100%;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.trigger {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--color-input-border, #d1d5db);
+  background-color: var(--color-bg-surface, #ffffff);
+  color: var(--color-text-main, #111827);
+  font-family: inherit;
+  font-size: 0.875rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+  span:first-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-grow: 1;
+    text-align: left;
+    margin-right: 0.5rem;
+    min-width: 0;
+  }
+
+  &:focus {
+    border-color: var(--color-primary, #0072ED);
+    box-shadow: 0 0 0 0.125rem rgba(0, 114, 237, 0.15);
+  }
+
+  &.hasError {
+    border-color: #ef4444;
+
+    &:focus {
+      box-shadow: 0 0 0 0.125rem rgba(239, 68, 68, 0.15);
+    }
+  }
+
+  &.disabled {
+    background-color: var(--color-bg-main, #f3f4f6);
+    color: var(--color-text-secondary, #9ca3af);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}
+
+.chevron {
+  color: var(--color-text-secondary, #6b7280);
+  transition: transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &.open {
+    transform: rotate(180deg);
+  }
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  background-color: var(--color-bg-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  z-index: 1050;
+  padding: 0.375rem;
+  margin: 0;
+  list-style: none;
+}
+
+.searchWrapper {
+  padding: 0.25rem 0.25rem 0.375rem;
+  position: sticky;
+  top: 0;
+  background-color: var(--color-bg-surface, #ffffff);
+  z-index: 1;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 0.4rem 0.625rem;
+  border: 1px solid var(--color-input-border, #d1d5db);
+  border-radius: 0.375rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  background-color: var(--color-bg-surface, #ffffff);
+  color: var(--color-text-main, #111827);
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: var(--color-primary, #0072ED);
+    box-shadow: 0 0 0 0.125rem rgba(0, 114, 237, 0.15);
+  }
+}
+
+.optionsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--color-text-main, #111827);
+  transition: background-color 0.2s ease, color 0.2s ease;
+
+  &:hover {
+    background-color: var(--color-bg-main, #f3f4f6);
+  }
+
+  &.isSelected {
+    background-color: var(--color-primary, #0072ED);
+    color: #ffffff;
+  }
+
+  &.noResults {
+    color: var(--color-text-secondary, #9ca3af);
+    cursor: default;
+    font-style: italic;
+
+    &:hover {
+      background-color: transparent;
+    }
+  }
+}
+
+.checkbox {
+  cursor: pointer;
+  width: 0.875rem;
+  height: 0.875rem;
+  accent-color: #ffffff;
+  flex-shrink: 0;
+}
+
+.errorMessage {
+  font-size: 0.75rem;
+  color: #ef4444;
+  margin-top: 0.125rem;
+}
+
+.applyWrapper {
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding: 0.375rem 0.25rem 0.125rem;
+  margin-top: 0.375rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.applyButton {
+  background-color: var(--color-primary, #0072ED);
+  color: #ffffff;
+  border: none;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: #005bbd;
+  }
+}

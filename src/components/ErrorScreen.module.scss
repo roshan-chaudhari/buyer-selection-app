@@ -1,0 +1,64 @@
+// c:\Roshan\CrossLine\buyer-selection-app\src\components\ErrorScreen.module.scss
+
+.container {
+  color: var(--color-text-main, #ffffff);
+  background-color: var(--color-bg-main, #0f172a);
+  min-height: 100vh;
+  padding: 1.5rem;
+  font-family: sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.errorContainer {
+  color: #ef4444;
+  background-color: var(--color-bg-main, #0f172a);
+  min-height: 100vh;
+  padding: 1.5rem;
+  font-family: sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.errorBlock {
+  word-break: break-all;
+  white-space: pre-wrap;
+  background-color: var(--color-bg-surface, #1e293b);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  color: #f87171;
+  border: 0.0625rem solid var(--color-border, #28282a);
+}
+
+.storedTokenSection {
+  margin-top: 1.5rem;
+}
+
+.storedTokenTitle {
+  color: var(--color-text-main, #ffffff);
+  margin-bottom: 0.5rem;
+}
+
+.tokenBlock {
+  word-break: break-all;
+  white-space: pre-wrap;
+  background-color: var(--color-bg-surface, #1e293b);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  color: #34d399;
+  border: 0.0625rem solid var(--color-border, #28282a);
+}
+
+.goBackBtn {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #dc2626;
+  }
+}

@@ -1,0 +1,157 @@
+// c:\Roshan\CrossLine\buyer-selection-app\src\pages\DashboardPage.module.scss
+
+.dashboardMain {
+  margin-top: 3.75rem; // accounts for Topbar height
+  padding: 2.5rem 1.5rem;
+  flex-grow: 1;
+  width: 100%;
+  max-width: 95%;
+  margin-left: auto;
+  margin-right: auto;
+
+  @media (max-width: 640px) {
+    padding: 1.5rem 1rem;
+  }
+}
+
+.projectsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.0625rem solid var(--color-border, #e5e7eb);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+
+  @media (max-width: 640px) {
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+  }
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.projectsTitle {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--color-text-main, #111827);
+  letter-spacing: -0.02em;
+
+  @media (max-width: 768px) {
+    font-size: 1.375rem;
+  }
+  @media (max-width: 480px) {
+    font-size: 1.125rem;
+  }
+}
+
+.projectsSubtitle {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary, #4b5563);
+  line-height: 1.5;
+
+  @media (max-width: 640px) {
+    display: none; // Hide subtitle on small screen sizes to keep header in a single line
+  }
+}
+
+.actionGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  
+  &.draft {
+    background-color: var(--color-bg-main, #f3f4f6);
+    color: var(--color-text-secondary, #4b5563);
+    border: 0.0625rem solid var(--color-border, #e5e7eb);
+  }
+  
+  &.syncro {
+    background-color: rgba(0, 114, 237, 0.1);
+    color: var(--color-primary, #0072ED);
+    border: 0.0625rem solid rgba(0, 114, 237, 0.2);
+  }
+}
+
+// ── SEARCH BAR ────────────────────────────────────────────────────────────────
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  margin-bottom: 0.75rem;
+  background-color: var(--color-bg-surface, #ffffff);
+  border: 0.0625rem solid var(--color-border, #e5e7eb);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.searchIcon {
+  color: var(--color-text-secondary, #9ca3af);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--color-text-main, #111827);
+  min-width: 0;
+
+  &::placeholder {
+    color: var(--color-text-secondary, #9ca3af);
+  }
+}
+
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary, #9ca3af);
+  font-size: 1.125rem;
+  line-height: 1;
+  padding: 0 0.125rem;
+  border-radius: 0.25rem;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--color-text-main, #374151);
+  }
+}
+
+.searchCount {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #9ca3af);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-left: 0.25rem;
+  border-left: 0.0625rem solid var(--color-border, #e5e7eb);
+}
+
+.projectNameLink {
+  font-weight: 600;
+  color: var(--color-primary, #0072ED);
+}
+

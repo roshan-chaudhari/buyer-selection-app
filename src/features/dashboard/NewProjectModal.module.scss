@@ -1,0 +1,27 @@
+.formContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}.formRow {
+  display: flex;
+  gap: 1rem;
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+}
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+
+  @media (max-width: 480px) {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
+}
+
+
+

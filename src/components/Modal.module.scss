@@ -1,0 +1,111 @@
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(0.25rem);
+  -webkit-backdrop-filter: blur(0.25rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 1rem;
+  animation: fadeInOverlay 0.2s ease-out forwards;
+}
+
+.modalContent {
+  width: 100%;
+  max-width: 32rem; // 512px
+  background-color: var(--color-bg-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.75rem;
+  box-shadow: 0 1.25rem 1.5625rem -0.3125rem rgba(0, 0, 0, 0.25), 0 0.625rem 0.625rem -0.3125rem rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 2rem);
+  animation: scaleInContent 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text-main, #111827);
+}
+
+.closeButton {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary, #6b7280);
+  cursor: pointer;
+  padding: 0.375rem;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--color-text-main, #111827);
+    background-color: var(--color-bg-main, #f3f4f6);
+  }
+}
+
+.modalBody {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleInContent {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+// ── Confirmation dialog layout ────────────────────────────────────────────────
+// Reusable inside any Modal when showing a confirm/destructive action prompt.
+
+.confirmBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.confirmText {
+  margin: 0;
+  color: var(--color-text-secondary, #6b7280);
+  line-height: 1.6;
+  font-size: 0.9375rem;
+
+  strong {
+    color: var(--color-text-main, #111827);
+    font-weight: 600;
+  }
+}
+
+.confirmActions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}

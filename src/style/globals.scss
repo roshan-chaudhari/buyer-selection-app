@@ -1,0 +1,107 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+html,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  background-color: var(--color-bg-main);
+  color: var(--color-text-main);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+// ── Dark theme tokens (default) ───────────────────────────────────────────────
+:root {
+  // Brand colors from screenshot
+  --color-primary: #0072ED;        // Vibrant Blue
+  --color-primary-hover: #0060C8;  // Darker Blue (active/hover)
+  --color-red-brand: #ED0C0C;      // Red logo 'i'
+  --color-gold-brand: #A14100;     // Gold 'DFM' button
+
+  // Glassmorphic Header tokens (Dark Theme)
+  --color-header-bg: rgba(18, 18, 19, 0.82); 
+  --color-header-text: #ffffff;
+  --color-header-text-secondary: rgba(255, 255, 255, 0.75);
+  --color-header-border: rgba(255, 255, 255, 0.08);
+
+  // Theme specific colors (Dark Theme defaults)
+  --color-bg-main: #121213;        // Dark background
+  --color-bg-surface: #1e1e1f;     // Dark surface card
+  --color-text-main: #ffffff;      // White text
+  --color-text-secondary: #bdbdbd; // Muted gray text
+  --color-border: #28282a;         // Dark borders
+  --color-input-border: #3f3f46;   // Dark controls border
+
+  // Fonts
+  --font-family: 'Helvetica Neue', Helvetica, acumin-pro, Arial, sans-serif;
+}
+
+// ── Light theme overrides (ThemeProvider adds .theme-light to <html> or root div) ─
+.theme-light {
+  // Brand colors (can remain identical or modified if needed)
+  --color-primary: #0072ED;
+  --color-primary-hover: #0060C8;
+  --color-red-brand: #ED0C0C;
+  --color-gold-brand: #A14100;
+
+  // Glassmorphic Header tokens (Light Theme)
+  --color-header-bg: rgba(255, 255, 255, 0.82);
+  --color-header-text: #111827;
+  --color-header-text-secondary: #4b5563;
+  --color-header-border: rgba(17, 24, 39, 0.08);
+
+  // Theme specific colors (Light Theme overrides)
+  --color-bg-main: #dfdfdf;        // Light gray background
+  --color-bg-surface: #ffffff;     // White surface card
+  --color-text-main: #111827;      // Dark text
+  --color-text-secondary: #4b5563; // Dark gray secondary text
+  --color-border: #e5e7eb;         // Light borders
+  --color-input-border: #94a3b8;   // Slate-400 border for highly visible contrast
+}
+
+/* Chrome, Safari, Edge */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+// ── GLOBAL LOADING VIEW UTILITIES ──────────────────────────────────────────────
+.global-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: var(--color-bg-main);
+  color: var(--color-text-main);
+  font-family: var(--font-family, sans-serif);
+}
+
+.global-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid rgba(0, 114, 237, 0.15);
+  border-radius: 50%;
+  border-top-color: var(--color-primary, #0072ED);
+  animation: spin-global 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.global-loading-text {
+  margin: 0;
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+@keyframes spin-global {
+  to {
+    transform: rotate(360deg);
+  }
+}

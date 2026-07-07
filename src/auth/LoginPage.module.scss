@@ -1,0 +1,232 @@
+.loginContainer {
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: radial-gradient(circle at 85% 15%, #162f3d 0%, #070e13 75%);
+  color: var(--color-text-main);
+  transition: colors 0.3s ease;
+  font-family: var(--font-family);
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+// Geometric 3D Step Shapes (Matte, with soft drop-shadows and borders)
+.bgStep1 {
+  position: absolute;
+  top: 15%;
+  left: -15%;
+  width: 70%;
+  height: 50%;
+  background: linear-gradient(135deg, #0c1a22 0%, #050a0d 100%);
+  transform: skewY(-15deg);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.bgStep2 {
+  position: absolute;
+  bottom: -20%;
+  left: 20%;
+  width: 80%;
+  height: 55%;
+  background: linear-gradient(135deg, #10212b 0%, #060c0f 100%);
+  transform: skewY(-15deg);
+  box-shadow: 0 50px 100px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+// ── PANELS ───────────────────────────────────────────────────────────────────
+
+.leftPanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem; // p-6
+  position: relative;
+  background: transparent;
+  overflow: hidden;
+  z-index: 10;
+  order: 2;
+
+  @media (min-width: 640px) {
+    padding: 3rem; // sm:p-12
+  }
+  @media (min-width: 768px) {
+    padding: 4rem; // md:p-16
+  }
+  @media (min-width: 1024px) {
+    padding: 5rem; // lg:p-20
+    border-right: 1px solid var(--color-border);
+    order: 1;
+  }
+}
+
+.rightPanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem 1.5rem 1.5rem;
+  position: relative;
+  background: transparent;
+  border-bottom: 1px solid var(--color-border);
+  overflow: hidden;
+  z-index: 10;
+  order: 1;
+
+  @media (min-width: 640px) {
+    padding: 4rem 3rem 3rem 3rem;
+  }
+  @media (min-width: 768px) {
+    padding: 5rem 4rem 4rem 4rem;
+  }
+  @media (min-width: 1024px) {
+    padding: 6rem 5rem 5rem 5rem;
+    border-bottom: none;
+    order: 2;
+  }
+}
+
+// ── CARDS & SECTIONS ──────────────────────────────────────────────────────────
+
+.glassCard {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem; // rounded-2xl (16px)
+  padding: 1.5rem; // p-6
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); // shadow-2xl
+  backdrop-filter: blur(12px); // backdrop-blur-md
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+
+  @media (min-width: 640px) {
+    padding: 2rem; // sm:p-8
+  }
+
+  &:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 114, 237, 0.05); // shadow-primary/5
+    border-color: rgba(0, 114, 237, 0.3);
+  }
+}
+
+// ── DROPZONE & FILE UPLOAD ───────────────────────────────────────────────────
+
+.dropZone {
+  width: 100%;
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-radius: 0.75rem;
+  border: 2px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: var(--color-primary);
+    background-color: rgba(0, 114, 237, 0.02);
+  }
+}
+
+.dragActive {
+  border-color: var(--color-primary) !important;
+  background-color: rgba(0, 114, 237, 0.08) !important;
+  transform: scale(1.02);
+}
+
+.uploadSuccessBlock {
+  width: 100%;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(16, 185, 129, 0.2); // border-emerald-500/20
+  background-color: rgba(16, 185, 129, 0.05); // bg-emerald-500/5
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.uploadErrorBlock {
+  width: 100%;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(239, 68, 68, 0.2); // border-rose-500/20
+  background-color: rgba(239, 68, 68, 0.05); // bg-rose-500/5
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.fileCard {
+  width: 100%;
+  background-color: var(--color-bg-main);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+// ── ANIMATIONS ───────────────────────────────────────────────────────────────
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bounceSlow {
+  animation: bounceSlow 3s infinite ease-in-out;
+}
+
+@keyframes bounceSlow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.loginFooter {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: rgba(7, 14, 19, 0.3);
+  backdrop-filter: blur(8px);
+  padding: 1.25rem 1rem;
+  z-index: 20;
+  order: 3;
+}

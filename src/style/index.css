@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+@source '../../../../packages/ui';
+
+/* Fonts */
+
+
+@font-face {
+	font-family: "Helvetica Neue";
+	font-weight: 400;
+	src: url("/fonts/helvetica-neue-roman.woff2") format("woff2"),
+		url("/fonts/helvetica-neue-roman.woff") format("woff");
+}
+
+@font-face {
+	font-family: "Helvetica Neue";
+	font-weight: 500;
+	src: url("/fonts/helvetica-neue-medium.woff2") format("woff2"),
+		url("/fonts/helvetica-neue-medium.woff") format("woff");
+}
+
+@font-face {
+	font-family: "Helvetica Neue";
+	font-weight: 700;
+	src: url("/fonts/helvetica-neue-bold.woff2") format("woff2"),
+		url("/fonts/helvetica-neue-bold.woff") format("woff");
+}
+

@@ -1,0 +1,54 @@
+.themeSwitchButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--color-text-main, #ffffff);
+  outline: none;
+}
+
+.themeSwitchTrack {
+  width: 2.25rem;
+  height: 1.25rem;
+  border-radius: 1rem;
+  background-color: var(--color-border, #28282a);
+  position: relative;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  border: 0.0625rem solid rgba(255, 255, 255, 0.1);
+
+  &.light {
+    background-color: var(--color-primary, #0072ED);
+    border-color: transparent;
+    
+    .themeSwitchThumb {
+      transform: translateX(1rem);
+      background-color: #ffffff;
+      color: var(--color-primary, #0072ED);
+    }
+  }
+}
+
+.themeSwitchThumb {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background-color: var(--color-bg-surface, #1e1e1f);
+  color: var(--color-text-main, #ffffff);
+  position: absolute;
+  left: 0.0625rem;
+  transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.2);
+}
+
+.themeToggleText {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
