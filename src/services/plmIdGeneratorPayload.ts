@@ -1,4 +1,4 @@
-import { odata2Service } from "./api";
+import { odata2Service, getIdGeneratorDetails } from "./api";
 import type { GenericLookUp } from "../types/api";
 
 export interface AutoNumberSegment {
@@ -106,7 +106,7 @@ export async function buildIdGenContextValues(
 
   const idgenlookup1 = (dat.idRulesDetails.lookupField1 ?? "").replace(/\s/g, "");
   const idgenlookup2 = (dat.idRulesDetails.lookupField2 ?? "").replace(/\s/g, "");
-  const datnumber = dat.idRulesDetails.autoNumberVal ?? [];
+  const datnumber = (dat.idRulesDetails?.autoNumberVal ?? []) as AutoNumberSegment[];
   
 
   // Filter "Contextual Value" segments ordered by seq
@@ -209,7 +209,6 @@ export async function computeIdGenContextValues(params: {
   const { autoNumberId, schema, styleData = {} } = params;
 
   // ── Step 1: Call PLM ID Generator API ──────────────────────────────────────
-  const { getIdGeneratorDetails } = await import("./api");
   const rawResponse = await getIdGeneratorDetails({ autoNumberId, Schema: schema });
 
   console.log("[computeIdGenContextValues] 📥 Raw idgenerator response:", JSON.stringify(rawResponse, null, 2));

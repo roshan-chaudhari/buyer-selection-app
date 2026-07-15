@@ -50,7 +50,7 @@ function buildColorwayOptions(
   };
 }
 
-function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string {
+function getFirstImage(_imgStr: string | null | undefined, plmUrl: string | null): string {
   return plmUrl || DEFAULT_GARMENT_SVG;
 }
 

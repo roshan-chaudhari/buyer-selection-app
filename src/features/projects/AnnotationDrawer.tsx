@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Plus, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import ImageEditor from 'tui-image-editor';
 import 'tui-image-editor/dist/tui-image-editor.css';
 import 'tui-color-picker/dist/tui-color-picker.css';
@@ -58,7 +58,6 @@ export default function AnnotationDrawer({
 
     // Parse annotatedImage array of strings
     let list: string[] = [];
-    const defaultOriginal = plmImageUrl || DEFAULT_GARMENT_SVG;
 
     if (isOpen && item?.annotatedImage) {
       const raw = item.annotatedImage;

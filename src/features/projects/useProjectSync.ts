@@ -5,7 +5,6 @@ import {
   createPlmJobTask,
   getPlmJobTaskItems,
   fetchPlmColorwayDetails,
-  uploadPlmStyleImage,
 } from "../../services/api";
 import {
   buildStyleCopyPayload,
@@ -15,7 +14,6 @@ import {
   buildSaveColorwayPayload,
   savePlmStyleColorways,
 } from "../../services/plmupdatestylecolordetails";
-import { projectService } from "../../services/projectService";
 import type { ProjectItem } from "../../services/projectService";
 import { extractODataList } from "../../utils/odata";
 import type { InforUser } from "../../types/api";
@@ -24,7 +22,8 @@ import type { GroupedStyle } from "../../types/projects";
 import { PLM_SYNCED_SECTIONS } from "./constants";
 import { groupItemsByStyle } from "./ProjectDetailsHelpers";
 
-type ShowToastFn = (message: string, type?: string) => void;
+import type { ToastType } from "../../hooks/useToast";
+type ShowToastFn = (message: string, type?: ToastType) => void;
 
 interface UseProjectSyncProps {
   project: TableType | undefined;
@@ -36,20 +35,40 @@ interface UseProjectSyncProps {
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-function resolveGroupStyleId(
-  firstItem: ProjectItem,
+async function resolveGroupStyleId(
+  _firstItem: ProjectItem,
   group: GroupedStyle,
-): number | undefined {
+): Promise<number | undefined> {
   const validItem = group.items.find((item) => item.styleId && item.styleId !== 0);
   if (validItem && validItem.styleId) {
     return validItem.styleId;
   }
-  return /^\d+$/.test(group.styleMaterialNumber)
-    ? Number(group.styleMaterialNumber)
-    : undefined;
+
+  const isNumeric = group.styleMaterialNumber.length > 0 && /^\d+$/.test(group.styleMaterialNumber);
+  if (isNumeric) {
+    return Number(group.styleMaterialNumber);
+  }
+
+  // Attempt to resolve the StyleId from PLM using the alphanumeric StyleCode
+  try {
+    console.log(`[useProjectSync] Attempting to resolve StyleId from PLM for code: ${group.styleMaterialNumber}`);
+    const response = await odata2styleCopy.getStyleDatacopy({ StyleCode: group.styleMaterialNumber });
+    const styleList = extractODataList<any>(response);
+    if (styleList.length > 0) {
+      const foundId = styleList[0].StyleId ?? styleList[0].Id;
+      if (foundId) {
+        console.log(`[useProjectSync] Dynamically resolved StyleId: ${foundId} for group ${group.styleMaterialNumber}`);
+        return Number(foundId);
+      }
+    }
+  } catch (err) {
+    console.warn(`[useProjectSync] Failed to resolve StyleId from PLM for code ${group.styleMaterialNumber}:`, err);
+  }
+
+  return undefined;
 }
 
-function extractNewStyleCode(jobResponse: any, taskItemsResponse: any): string {
+function extractNewStyleCode(_jobResponse: any, taskItemsResponse: any): string {
   const taskItemsList = extractODataList<any>(taskItemsResponse);
   const taskItem =
     taskItemsList[0] ?? taskItemsResponse?.data?.[0] ?? taskItemsResponse;
@@ -93,7 +112,8 @@ function matchColorways(
   return matched;
 }
 
-async function updateLocalItems(
+/*
+async function _updateLocalItems(
   groupItems: ProjectItem[],
   matchedColorways: { plmColorway: any; projItem: ProjectItem }[],
   newStyleId: number | string,
@@ -141,7 +161,7 @@ async function updateLocalItems(
   }
 }
 
-function dataURLtoBlob(dataurl: string): Blob {
+function _dataURLtoBlob(dataurl: string): Blob {
   const arr = dataurl.split(',');
   const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
   const bstr = atob(arr[1]);
@@ -152,6 +172,7 @@ function dataURLtoBlob(dataurl: string): Blob {
   }
   return new Blob([u8arr], { type: mime });
 }
+*/
 
 function getBase64Image(annotatedImage: string | null | undefined): string | null {
   if (!annotatedImage) return null;
@@ -194,8 +215,13 @@ async function processStyleGroup(
     return;
   }
 
-  const resolvedStyleId = resolveGroupStyleId(firstItem, group);
+  const resolvedStyleId = await resolveGroupStyleId(firstItem, group);
   console.log(`[useProjectSync] resolvedStyleId: ${resolvedStyleId} for group ${group.styleMaterialNumber}`);
+
+  if (!resolvedStyleId) {
+    console.warn(`[useProjectSync] No valid StyleId could be resolved for group ${group.styleMaterialNumber}. Skipping sync for this group.`);
+    return;
+  }
 
   const styleNode = await fetchPlmStyleDetails(resolvedStyleId, currentUser);
   if (!styleNode) {
@@ -341,7 +367,7 @@ async function processStyleGroup(
         isDefault: false,
         objectId: 0,
         originalObjectName,
-        objectStream: null,
+        objectStream: rawBase64,
         tempId: generateUUID()
       };
 

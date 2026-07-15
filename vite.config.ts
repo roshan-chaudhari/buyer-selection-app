@@ -63,6 +63,9 @@ export default defineConfig({
       errorRecovery: true
     }
   },
+  build: {
+    chunkSizeWarningLimit: 1500
+  },
   server: {
     proxy: {
       '/api': {

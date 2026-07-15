@@ -3,11 +3,11 @@ import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
 export const api = axios.create({
-  baseURL: "",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "",
 });
 
 export const corsProxyApi = axios.create({
-  baseURL: "/cors-proxy",
+  baseURL: (import.meta.env.VITE_API_BASE_URL || "") + "/cors-proxy",
 });
 
 function buildTargetUrl(endpoint: string, iu: string, ti: string): string {
@@ -155,7 +155,7 @@ const apiProcessor = <T>(
   message: string,
   error: unknown,
   meta?: unknown,
-  config: ApiConfig = { showToast: true },
+  _config: ApiConfig = { showToast: true },
 ): T | ApiResponseWrapper<T> => {
   if (success) {
     if (Array.isArray(data)) {

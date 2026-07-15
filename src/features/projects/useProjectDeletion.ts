@@ -3,7 +3,8 @@ import { projectService, type ProjectItem } from "../../services/projectService"
 import type { TableType } from "../../types/table";
 import type { GroupedStyle } from "../../types/projects";
 
-type ShowToastFn = (message: string, type?: string) => void;
+import type { ToastType } from "../../hooks/useToast";
+type ShowToastFn = (message: string, type?: ToastType) => void;
 
 interface UseProjectDeletionProps {
   project: TableType | undefined;

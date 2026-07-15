@@ -14,7 +14,7 @@ import styles from './EditItemModal.module.scss';
 
 // ─── Mapping Helpers ──────────────────────────────────────────────────────────
 
-function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string | null {
+function getFirstImage(_imgStr: string | null | undefined, plmUrl: string | null): string | null {
   return plmUrl || null;
 }
 

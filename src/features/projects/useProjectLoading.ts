@@ -3,7 +3,8 @@ import { projectService, type ProjectItem } from "../../services/projectService"
 import { getStoredToken } from "../../auth/tokenUtils";
 import type { TableType } from "../../types/table";
 
-type ShowToastFn = (message: string, type?: string) => void;
+import type { ToastType } from "../../hooks/useToast";
+type ShowToastFn = (message: string, type?: ToastType) => void;
 
 interface UseProjectLoadingProps {
   projectName: string;
