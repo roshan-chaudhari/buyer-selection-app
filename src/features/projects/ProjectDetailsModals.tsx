@@ -15,6 +15,7 @@ interface ProjectDetailsModalsProps {
   project: TableType;
   items: ProjectItem[];
   currentUser: InforUser | null;
+  isLocked: boolean;
   isEditing: boolean;
   setIsEditing: (val: boolean) => void;
   isAddModalOpen: boolean;
@@ -49,6 +50,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
   project,
   items,
   currentUser,
+  isLocked,
   isEditing,
   setIsEditing,
   isAddModalOpen,
@@ -80,7 +82,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
 }) => {
   return (
     <>
-      {isEditing && (
+      {isEditing && !isLocked && (
         <EditProjectModal
           key={project.id}
           isOpen={isEditing}
@@ -92,7 +94,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
         />
       )}
 
-      {isAddModalOpen && (
+      {isAddModalOpen && !isLocked && (
         <AddStylesModal
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}

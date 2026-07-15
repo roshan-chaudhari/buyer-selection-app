@@ -7,6 +7,7 @@ export interface BackendProject {
   id: number;
   projectName: string;
   section: string;
+  isLocked: boolean;
   buyerId: number | null;
   buyerName: string | null;
   description: string | null;
@@ -25,7 +26,8 @@ const mapBackendToTableType = (p: BackendProject): TableType => ({
   Items: p.itemsCount || 0,
   LastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
   Actions: '',
-  section: p.section || 'Draft'
+  section: p.section || 'Draft',
+  isLocked: p.isLocked ?? false,
 });
 
 //#region Project Service
@@ -178,7 +180,19 @@ export const projectService = {
     } catch (err: unknown) {
       throw new Error(getErrorMessage(err), { cause: err });
     }
-  }
+  },
+
+  lockProject: async (id: number): Promise<TableType> => {
+    try {
+      const { data } = await api.patch(`/api/projects/${id}/lock`);
+      if (data && data.success && data.data) {
+        return mapBackendToTableType(data.data as BackendProject);
+      }
+      throw new Error(data?.message || 'Failed to lock project');
+    } catch (err: unknown) {
+      throw new Error(getErrorMessage(err), { cause: err });
+    }
+  },
 
 };
 

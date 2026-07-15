@@ -12,6 +12,7 @@ import styles from "./ProjectDetailsPage.module.scss";
 interface UseProjectColumnsProps {
   plmColorwaysMap: Record<string, ColorwayOption[]>;
   plmImagesMap: Record<string, string>;
+  isLocked: boolean;
   onAnnotationOpen: (item: ProjectItem) => void;
   onColorwayChange: (
     row: GroupedStyle,
@@ -49,9 +50,14 @@ function buildColorwayOptions(
   };
 }
 
+function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string {
+  return plmUrl || DEFAULT_GARMENT_SVG;
+}
+
 export function useProjectColumns({
   plmColorwaysMap,
   plmImagesMap,
+  isLocked,
   onAnnotationOpen,
   onColorwayChange,
   onDeleteStyle,
@@ -63,8 +69,8 @@ export function useProjectColumns({
       header: "Image",
       width: "60px",
       render: (row) => {
-        const targetImage = row.annotatedImage || plmImagesMap[row.styleMaterialNumber] || DEFAULT_GARMENT_SVG;
-        const hasRealImage = !!(row.annotatedImage || plmImagesMap[row.styleMaterialNumber]);
+        const targetImage = getFirstImage(row.annotatedImage, plmImagesMap[row.styleMaterialNumber]);
+        const hasRealImage = !!(targetImage && targetImage !== DEFAULT_GARMENT_SVG);
         return (
           <div
             className={styles.thumbnailCell}
@@ -120,7 +126,7 @@ export function useProjectColumns({
             <span className={styles.colorwayCountBadge}>
               {selectedValues.length} {selectedValues.length === 1 ? "Colorway" : "Colorways"}
             </span>
-            {allColorways.length > 0 && (
+            {!isLocked && allColorways.length > 0 && (
               <Dropdown
                 className={styles.colorwayAddDropdown}
                 value={selectedValues.join(",")}
@@ -150,17 +156,21 @@ export function useProjectColumns({
       width: "160px",
       render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <Dropdown
-            className={styles.inlineSelectDropdown}
-            value={row.selectionCondition || "As-Is"}
-            searchable={false}
-            fullWidth={true}
-            onChange={(e) => void onConditionChange(row, e.target.value)}
-          >
-            <option value="As-Is">As-Is</option>
-            <option value="Small Change">Small Change</option>
-            <option value="Big-Change">Big-Change</option>
-          </Dropdown>
+          {isLocked ? (
+            <span className={styles.truncateText}>{row.selectionCondition || "As-Is"}</span>
+          ) : (
+            <Dropdown
+              className={styles.inlineSelectDropdown}
+              value={row.selectionCondition || "As-Is"}
+              searchable={false}
+              fullWidth={true}
+              onChange={(e) => void onConditionChange(row, e.target.value)}
+            >
+              <option value="As-Is">As-Is</option>
+              <option value="Small Change">Small Change</option>
+              <option value="Big-Change">Big-Change</option>
+            </Dropdown>
+          )}
         </div>
       ),
     },
@@ -171,18 +181,20 @@ export function useProjectColumns({
       width: "120px",
       render: (row) => (
         <div className={styles.actionCell}>
-          <Button
-            variant="text"
-            icon={<Trash2 size={16} />}
-            aria-label="Delete style"
-            title="Delete Style"
-            onClick={(e) => {
-              e.stopPropagation();
-              void onDeleteStyle(row);
-            }}
-          />
+          {!isLocked && (
+            <Button
+              variant="text"
+              icon={<Trash2 size={16} />}
+              aria-label="Delete style"
+              title="Delete Style"
+              onClick={(e) => {
+                e.stopPropagation();
+                void onDeleteStyle(row);
+              }}
+            />
+          )}
         </div>
       ),
     },
-  ], [plmColorwaysMap, plmImagesMap, onAnnotationOpen, onColorwayChange, onDeleteStyle, onConditionChange]);
+  ], [plmColorwaysMap, plmImagesMap, isLocked, onAnnotationOpen, onColorwayChange, onDeleteStyle, onConditionChange]);
 }

@@ -149,6 +149,15 @@
     color: #10b981;
     border: 0.0625rem solid rgba(16, 185, 129, 0.2);
   }
+
+  &.locked {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+    border: 0.0625rem solid rgba(245, 158, 11, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
 }
 
 .projectMeta {
@@ -807,6 +816,35 @@
   outline: none;
   width: 100%;
   cursor: pointer;
+  position: relative;
+
+  &:not(:focus) {
+    &::-webkit-datetime-edit {
+      color: transparent !important;
+    }
+
+    &::before {
+      content: attr(data-date);
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-text-main, #1f2937);
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    :global(:root:not(.theme-light)) &::before {
+      color: #cbd5e1;
+    }
+
+    &[data-date="DD/MM/YYYY"]::before {
+      color: var(--color-text-secondary, #9ca3af) !important;
+      opacity: 0.7;
+    }
+  }
 
   &::-webkit-calendar-picker-indicator {
     opacity: 0.5;
@@ -853,3 +891,20 @@
   flex-wrap: nowrap;
   min-width: max-content;
 }
+
+.inlineReadOnlyInput {
+  background-color: transparent;
+  border: none;
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  padding: 0;
+  width: 100%;
+  outline: none;
+  cursor: not-allowed;
+
+  :global(:root:not(.theme-light)) & {
+    color: #94a3b8;
+  }
+}
+

@@ -23,6 +23,7 @@ export default function ProjectDetailsPage({
   const columns = useProjectColumns({
     plmColorwaysMap: details.plmColorwaysMap,
     plmImagesMap: details.plmImagesMap,
+    isLocked: details.isLocked,
     onAnnotationOpen: details.openAnnotation,
     onColorwayChange: details.handleColorwayDropdownChange,
     onDeleteStyle: details.handleDeleteStyle,
@@ -37,6 +38,7 @@ export default function ProjectDetailsPage({
         styleGroup={styleGroup}
         editStates={details.editStates}
         statusOptions={details.statusOptions}
+        isLocked={details.isLocked}
         getDraftValue={details.getDraftValue}
         handleFieldChange={details.handleFieldChange}
         handleInlineSave={details.handleInlineSave}
@@ -46,6 +48,7 @@ export default function ProjectDetailsPage({
     [
       details.editStates,
       details.statusOptions,
+      details.isLocked,
       details.getDraftValue,
       details.handleFieldChange,
       details.handleInlineSave,
@@ -77,6 +80,8 @@ export default function ProjectDetailsPage({
       <ProjectHeader
         project={details.project}
         isSynced={details.isSynced}
+        isLocked={details.isLocked}
+        isSyncing={details.isSyncing}
         selectionDateStr={selectionDateStr}
         onNavigate={navigate}
         onAddItems={() => details.setIsAddModalOpen(true)}
@@ -104,14 +109,14 @@ export default function ProjectDetailsPage({
                 variant="outline"
                 title="Refresh"
                 onClick={details.handleRefresh}
-                disabled={details.isLoading}
+                disabled={details.isLoading || details.isSyncing}
                 icon={<RefreshCw size={14} className={details.isLoading ? styles.spinning : ''} />}
               />
               <Button
                 variant="outline"
                 title="Clear Project"
                 onClick={() => setConfirmClearOpen(true)}
-                disabled={details.sortedGroupedStyles.length === 0 || details.isLoading}
+                disabled={details.isLocked || details.isSyncing || details.sortedGroupedStyles.length === 0 || details.isLoading}
                 icon={<Trash2 size={14} />}
               />
             </>
@@ -124,10 +129,11 @@ export default function ProjectDetailsPage({
         {...details}
         project={details.project}
         currentUser={currentUser}
+        isLocked={details.isLocked}
       />
 
       <ConfirmModal
-        isOpen={confirmClearOpen}
+        isOpen={confirmClearOpen && !details.isLocked}
         title="Clear Project"
         message={
           <>
@@ -142,6 +148,31 @@ export default function ProjectDetailsPage({
         }}
         isConfirming={details.isLoading}
       />
+
+      {/* Full-screen Freezing Sync Loader Overlay */}
+      {details.isSyncing && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(0.25rem)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div className="global-spinner" />
+          <p style={{ color: '#ffffff', marginTop: '1rem', fontSize: '1rem', fontWeight: 600 }}>
+            Synchronizing project to SYNCRO PLM, please wait...
+          </p>
+        </div>
+      )}
     </main>
   );
 }

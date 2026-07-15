@@ -8,9 +8,10 @@ interface UseProjectItemEditingProps {
   project: TableType | undefined;
   showToast: ShowToastFn;
   refreshItems: (projectId: number) => Promise<ProjectItem[]>;
+  statusOptions: { value: string; label: string; id: number }[];
 }
 
-export function useProjectItemEditing({ project, showToast, refreshItems }: UseProjectItemEditingProps) {
+export function useProjectItemEditing({ project, showToast, refreshItems, statusOptions }: UseProjectItemEditingProps) {
   const [editStates, setEditStates] = useState<Record<number, Partial<ProjectItem>>>({});
 
   const getDraftValue = useCallback(
@@ -44,16 +45,20 @@ export function useProjectItemEditing({ project, showToast, refreshItems }: UseP
     const resolveDraft = <T,>(drafted: T | undefined, fallback: T): T =>
       drafted !== undefined ? drafted : fallback;
 
+    const finalStatus = resolveDraft(drafts.colorwayStatus, item.colorwayStatus || "Selected");
+    const matchedStatusOpt = statusOptions.find(opt => opt.value === finalStatus);
+    const finalStatusId = matchedStatusOpt ? matchedStatusOpt.id : resolveDraft(drafts.colorStatusId, item.colorStatusId ?? 0);
+
     try {
       await projectService.updateProjectItem(item.id, {
         styleId: item.styleId ?? 0,
         colorId: item.colorId ?? 0,
-        colorStatusId: resolveDraft(drafts.colorStatusId, item.colorStatusId ?? 0),
+        colorStatusId: finalStatusId,
         styleMaterialNumber: item.styleMaterialNumber,
         styleMaterialName: item.styleMaterialName,
         colorway: item.colorway,
-        colorwayStatus: resolveDraft(drafts.colorwayStatus, item.colorwayStatus ?? "Pending"),
-        selectionCondition: item.selectionCondition,
+        colorwayStatus: finalStatus,
+        selectionCondition: resolveDraft(drafts.selectionCondition, item.selectionCondition || "As-Is"),
         sampleDue: resolveDraft(drafts.sampleDue, item.sampleDue),
         buyerComments: resolveDraft(drafts.buyerComments, item.buyerComments ?? ""),
         internalComments: resolveDraft(drafts.internalComments, item.internalComments ?? ""),
@@ -72,7 +77,7 @@ export function useProjectItemEditing({ project, showToast, refreshItems }: UseP
       console.error("[useProjectItemEditing] handleInlineSave failed:", err);
       showToast(err instanceof Error ? err.message : "Failed to save colorway", "error");
     }
-  }, [editStates, project, showToast, refreshItems]);
+  }, [editStates, project, showToast, refreshItems, statusOptions]);
 
   return { editStates, getDraftValue, handleFieldChange, handleInlineSave };
 }

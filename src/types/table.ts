@@ -8,5 +8,6 @@ export interface TableType {
     Items: number,
     LastUpdated: Date,
     Actions: string,
-    section?: string
+    section?: string,
+    isLocked?: boolean,
 }

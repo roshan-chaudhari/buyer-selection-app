@@ -12,6 +12,19 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const defaultId = React.useId();
     const inputId = id || defaultId;
 
+    const isDate = type === 'date';
+    const toDisplayDate = (value: any): string => {
+      if (!value) return '';
+      const str = String(value);
+      const parts = str.split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${day}/${month}/${year}`;
+      }
+      return str;
+    };
+    const displayDate = isDate ? toDisplayDate(props.value) : undefined;
+
     return (
       <div className={`${styles.fieldWrapper} ${fullWidth ? styles.fullWidth : ''}`}>
         {label && (
@@ -25,6 +38,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           className={`${styles.control} ${error ? styles.hasError : ''} ${className}`}
           title={props.value ? String(props.value) : undefined}
+          data-date={displayDate || undefined}
           {...props}
         />
         {error && <span className={styles.errorMessage}>{error}</span>}

@@ -2,23 +2,14 @@ import axios from "axios";
 import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
-// Empty baseURL: all routing is done by Vite's proxy rules.
-// - /api/projects        → proxied to http://localhost:5000 (local backend)
-// - /cors-proxy          → handled by the dynamic CORS tunnel (Infor external API)
 export const api = axios.create({
   baseURL: "",
 });
 
-// Dedicated axios instance for Infor CORS-proxy calls.
-// baseURL = '/cors-proxy' so relative paths route through the Vite middleware,
-// and the interceptor below builds x-target-url correctly from the path.
 export const corsProxyApi = axios.create({
   baseURL: "/cors-proxy",
 });
 
-/**
- * Shared utility to build the Infor API target URL dynamically.
- */
 function buildTargetUrl(endpoint: string, iu: string, ti: string): string {
   const baseUrl = iu.trim().endsWith("/") ? iu.trim() : `${iu.trim()}/`;
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
@@ -49,9 +40,7 @@ corsProxyApi.interceptors.request.use((config) => {
 let requestInterceptorId: number | null = null;
 let responseInterceptorId: number | null = null;
 
-// Configures Axios interceptors to resolve credentials, token, and target path
 export const setupInterceptors = () => {
-  // Eject existing interceptors before re-registering (safe for HMR)
   if (requestInterceptorId !== null)
     api.interceptors.request.eject(requestInterceptorId);
   if (responseInterceptorId !== null)
@@ -65,16 +54,25 @@ export const setupInterceptors = () => {
 
       const cleanEndpoint = config.url || "";
 
-      // Local backend calls (/api/...) go through Vite's proxy directly — skip x-target-url
       if (cleanEndpoint.startsWith("/api/")) {
+        if (
+          cleanEndpoint.includes("/odata2/") ||
+          cleanEndpoint.includes("/job/") ||
+          cleanEndpoint.includes("/library/") ||
+          cleanEndpoint.includes("/pdm/") ||
+          cleanEndpoint.includes("/document") // PLM pdm/document services
+        ) {
+          const iu = localStorage.getItem("iu");
+          const ti = localStorage.getItem("ti");
+          if (iu) config.headers["x-infor-url"] = iu;
+          if (ti) config.headers["x-tenant-id"] = ti;
+        }
         return config;
       }
 
-      // Resolve Infor API Base URL and Tenant ID dynamically (for /cors-proxy calls)
       const iu = localStorage.getItem("iu");
       const ti = localStorage.getItem("ti");
 
-      // If credentials aren't set yet, skip adding x-target-url
       if (!iu || !ti) return config;
 
       config.headers["x-target-url"] = buildTargetUrl(cleanEndpoint, iu, ti);
@@ -96,10 +94,10 @@ export const setupInterceptors = () => {
         const configHeaders = error.config?.headers;
         const targetUrlStr = String(
           configHeaders?.["x-target-url"] ??
-            (typeof configHeaders?.get === "function"
-              ? configHeaders.get("x-target-url")
-              : "") ??
-            "",
+          (typeof configHeaders?.get === "function"
+            ? configHeaders.get("x-target-url")
+            : "") ??
+          "",
         );
         const isUserInfoReq =
           urlStr.includes("getinfo") || targetUrlStr.includes("getinfo");
@@ -198,13 +196,9 @@ const handleApiError = (err: unknown): ApiResponseWrapper<any> => {
 export const userService = {
   getCurrentUser: async (): Promise<ApiResponseWrapper<InforUser>> => {
     try {
-      // Use the dedicated corsProxyApi instance (baseURL='/cors-proxy') so the
-      // request hits the Vite middleware and x-target-url is built from the path.
       const response = await corsProxyApi.get<InforUser>(
         "FASHIONPLM/security/api/security/user/getinfo/guid",
       );
-      // API returns a plain camelCase object — cast directly.
-      // OData fallbacks handle edge cases where the payload is wrapped (d.results / value / array).
       const data = response.data as unknown;
       const rawUser: InforUser | null =
         (data as { d?: { results?: InforUser[] } })?.d?.results?.[0] ??
@@ -240,9 +234,6 @@ export const userService = {
   },
 };
 
-/**
- * Backward compatible wrapper function that extracts the user object.
- */
 export async function fetchCurrentUser(): Promise<InforUser> {
   const result = await userService.getCurrentUser();
   if (result && result.success && result.data) {
@@ -251,20 +242,13 @@ export async function fetchCurrentUser(): Promise<InforUser> {
   throw new Error(result?.message || "Failed to fetch user");
 }
 
-//#region OData2 Services
-
-/**
- * Generic service to call OData2 endpoints through the backend proxy.
- * The backend constructs the full Infor URL using the .ionapi config (TI + IU).
- * Frontend only passes the endpoint name and optional OData query params.
- */
 export const odata2Service = {
   /**
    * Call GET /api/odata2/GenericLookUpAll with optional OData filter params.
    * Example: genericLookup({ GlrefId: 1 })
    */
   genericLookup: async (
-    params: { GlrefId?: number; [key: string]: unknown } = {},
+    params: { GlrefId?: number;[key: string]: unknown } = {},
   ): Promise<unknown> => {
     const token = getStoredToken();
 
@@ -331,7 +315,7 @@ export const odata2Service = {
 
 export const odata2style = {
   getStyleData: async (
-    params: { StyleId?: number; [key: string]: unknown } = {},
+    params: { StyleId?: number;[key: string]: unknown } = {},
   ): Promise<unknown> => {
     const token = getStoredToken();
 
@@ -358,6 +342,43 @@ export const odata2style = {
     const queryString = `?$expand=StyleColorways`;
 
     const response = await api.get(`/api/odata2/Style${queryString}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    return response.data;
+  },
+};
+
+
+export const odata2styleCopy = {
+  getStyleDatacopy: async (
+    params: { StyleCode?: string; Name?: string;[key: string]: unknown } = {},
+  ): Promise<unknown> => {
+    const token = getStoredToken();
+
+    const filterParts = Object.entries(params)
+      .map(([key, value]) => {
+        const formattedValue = typeof value === "string"
+          ? `'${value.replace(/'/g, "''")}'`
+          : value;
+        return `${key} eq ${formattedValue}`;
+      })
+      .join(" and ");
+
+    const queryString = filterParts
+      ? `?$filter=IsDeleted eq 0 and ${encodeURIComponent(filterParts)}`
+      : "";
+
+    const response = await api.get(`/api/odata2/Style${queryString}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    return response.data;
+  },
+
+  refreshStyleData: async (): Promise<unknown> => {
+    const token = getStoredToken();
+    const response = await api.get(`/api/odata2/Style`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
@@ -501,6 +522,36 @@ export const getPlmAttachmentGridBody = (
   };
 };
 
+
+export const getPlmColorwayDetailsGridBody = (
+  finalStyleId: number | string,
+  schema: string,
+  userId: number | string,
+  roleId: number | string
+) => {
+  return {
+    roleId: Number(roleId),
+    userId: Number(userId),
+    personalizationId: 0,
+    entity: "StyleColorways",
+    pageType: "list",
+    dataFilter: {
+      Conditions: [
+        {
+          fieldName: "StyleId",
+          operator: "=",
+          value: Number(finalStyleId),
+        },
+      ],
+    },
+    includeLookups: false,
+    pageInfo: null,
+    moduleCaller: "list",
+    Schema: schema,
+  };
+};
+
+
 // ── Attachment filter helpers ─────────────────────────────────────────────────────
 
 /** Returns the MIME type inferred from a filename's extension. */
@@ -541,12 +592,15 @@ export async function fetchStyleImage(
 ): Promise<string | null> {
   if (!styleId || !currentUser) return null;
 
-  const schema = currentUser.activeSchema || "FSH212";
-  const userId = currentUser.userId || 50;
-  const roleId = currentUser.activeRoleId || 1;
+  const schema = currentUser.activeSchema;
+  const userId = currentUser.userId;
+  const roleId = currentUser.activeRoleId;
 
   const body = getPlmAttachmentGridBody(styleId, schema, userId, roleId);
   const token = getStoredToken();
+
+  const apiStart = performance.now();
+  console.log(`[PERFORMANCE LOG] fetchStyleImage API request started for StyleId ${styleId} at ${new Date().toISOString()}`);
 
   try {
     const response = await api.post<any>(
@@ -556,6 +610,9 @@ export async function fetchStyleImage(
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
+
+    const apiEnd = performance.now();
+    console.log(`[PERFORMANCE LOG] fetchStyleImage API request completed. Duration: ${(apiEnd - apiStart).toFixed(2)}ms`);
 
     const responseData = response.data;
     if (!responseData) return null;
@@ -580,20 +637,12 @@ export async function fetchStyleImage(
 
     if (!imgAttachment) return null;
 
-    // If a direct S3 URL exists, proxy it to avoid canvas CORS issues
+    // If a direct S3 URL exists, return the proxy URL directly.
+    // The backend will stream the binary image directly to the browser,
+    // which is faster, memory-efficient, and avoids CORS canvas issues.
     const directUrl = imgAttachment.Image || imgAttachment.ImageCustom || imgAttachment.ImageThumb;
     if (directUrl) {
-      try {
-        const proxyResponse = await api.get<any>("/api/projects/proxy-image", {
-          params: { url: directUrl },
-        });
-        if (proxyResponse.data?.data?.dataUrl) {
-          return proxyResponse.data.data.dataUrl;
-        }
-      } catch {
-        // Fallback to direct URL if proxy fails (works in <img> but not canvas)
-        return directUrl;
-      }
+      return `/api/projects/proxy-image?url=${encodeURIComponent(directUrl)}`;
     }
 
     // Fallback: parse raw base64 Value field
@@ -616,4 +665,223 @@ export async function fetchStyleImage(
   }
 }
 
+// ── Style Node Fetcher ────────────────────────────────────────────────────────
+
+/**
+ * Fetches the full PLM "Style" entity column node for a given StyleId.
+ * Uses getPlmAttachmentGridBody under the hood and returns ONLY the Style
+ * entity's column data — all scalar fields, free fields, user-defined fields,
+ * dates, etc. — stripping attachments and other child entities.
+ *
+ * Returns null if the style is not found or the call fails.
+ */
+export async function fetchPlmStyleDetails(
+  styleId: number | string,
+  currentUser: any
+): Promise<Record<string, unknown> | null> {
+  console.log(`[fetchPlmStyleDetails] Called with styleId: ${styleId}`, "currentUser:", currentUser);
+  if (!styleId || !currentUser) {
+    console.warn(`[fetchPlmStyleDetails] Missing styleId or currentUser. styleId: ${styleId}`);
+    return null;
+  }
+
+  const schema = currentUser.activeSchema;
+  const userId = currentUser.userId;
+  const roleId = currentUser.activeRoleId;
+
+  const body = getPlmAttachmentGridBody(styleId, schema, userId, roleId);
+  const token = getStoredToken();
+
+  // console.log(`[fetchPlmStyleDetails] Built body:`, JSON.stringify(body, null, 2));
+  // console.log(`[fetchPlmStyleDetails] Stored Token exists: ${!!token}`);
+
+  try {
+    console.log(`[fetchPlmStyleDetails] Sending POST request to /api/odata2/view/entity/data/get...`);
+    const response = await api.post<any>(
+      "/api/odata2/view/entity/data/get",
+      body,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+
+    const responseData = response.data;
+    console.log(`[fetchPlmStyleDetails] Received response. Status: ${response.status}`);
+    console.log(`[fetchPlmStyleDetails] responseData for StyleId ${styleId}:`, JSON.stringify(responseData, null, 2));
+
+    if (!responseData) {
+      console.warn(`[fetchPlmStyleDetails] Empty responseData received for StyleId ${styleId}`);
+      return null;
+    }
+
+    // Navigate to the entities array (handles both wrapped and flat responses)
+    const entities: any[] = responseData.entities || responseData.d?.entities || [];
+    console.log(`[fetchPlmStyleDetails] Extracted entities count: ${entities.length}`);
+
+    // Find the "Style" entity node
+    const styleEntity = entities.find(
+      (e: any) => e.name === "Style" || e.Name === "Style"
+    );
+    if (!styleEntity) {
+      console.warn(`[fetchPlmStyleDetails] Style entity node not found in entities array for StyleId ${styleId}. Entities:`, entities);
+      return null;
+    }
+
+    // Return the column object — the flat Style record with all PLM fields
+    const column = styleEntity.column || styleEntity.Column;
+    console.log(`[fetchPlmStyleDetails] Extracted Style columns keys:`, Object.keys(column || {}));
+    return (column as Record<string, unknown>) ?? null;
+  } catch (err) {
+    console.error(`[fetchPlmStyleDetails] Failed to fetch PLM node for StyleId ${styleId}. Error details:`, err);
+    throw err;
+  }
+}
+
+
+export async function fetchPlmColorwayDetails(
+  styleId: number | string,
+  currentUser: any
+): Promise<any[] | null> {
+  if (!styleId || !currentUser) return null;
+
+  const schema = currentUser.activeSchema;
+  const userId = currentUser.userId;
+  const roleId = currentUser.activeRoleId;
+
+  const body = getPlmColorwayDetailsGridBody(styleId, schema, userId, roleId);
+  const token = getStoredToken();
+
+  try {
+    const response = await api.post<any>(
+      "/api/odata2/view/layout/data/get",
+      body,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+
+    const responseData = response.data;
+    console.log(`[fetchPlmColorwayDetails] responseData for StyleId ${styleId}:`, JSON.stringify(responseData, null, 2));
+
+    if (!responseData) return null;
+
+    // Navigate to the entities array (handles both wrapped and flat responses)
+    const entities: any[] = responseData.entities || responseData.d?.entities || [];
+
+    // Filter and map only the entities matching "StyleColorways"
+    const colorways = entities
+      .filter((e: any) => e && (e.name === "StyleColorways" || e.Name === "StyleColorways"))
+      .map((e: any) => e.column || e.Column)
+      .filter((c: any) => c != null);
+
+    console.log(`[fetchPlmColorwayDetails] Extracted ${colorways.length} StyleColorways:`, JSON.stringify(colorways, null, 2));
+    return colorways;
+  } catch (err) {
+    console.error(`[fetchPlmColorwayDetails] Failed to fetch colorways for StyleId ${styleId}:`, err);
+    throw err;
+  }
+}
+
+
 //#endregion
+
+// ── PLM Job Tasks ─────────────────────────────────────────────────────────────
+
+/**
+ * Posts a job task request to PLM.
+ * Endpoint: POST /api/job/tasks
+ *
+ * The caller is responsible for building the request body (use buildStyleCopyPayload
+ * from plmStyleCopyPayload.ts). This function only handles the HTTP call.
+ *
+ * @param requestBody - The fully-built payload (PlmStyleCopyRequest or any job body)
+ */
+export async function createPlmJobTask(
+  requestBody: Record<string, unknown>,
+): Promise<{ success: boolean; jobId?: string | number; message?: string; data?: unknown }> {
+  const token = getStoredToken();
+
+  const { data } = await api.post<any>(
+    "/api/job/tasks",
+    requestBody,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
+
+  return data;
+}
+
+/**
+ * Gets details of style copying task items to find the newly created style code.
+ * Endpoint: POST /api/job/tasks/items
+ */
+export async function getPlmJobTaskItems(params: {
+  taskKeys: string[];
+  Schema: string;
+}): Promise<any> {
+  const token = getStoredToken();
+
+  const { data } = await api.post(
+    "/api/job/tasks/items",
+    params,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
+
+  return data;
+}
+
+export async function getIdGeneratorDetails(params: {
+  autoNumberId: string;
+  Schema: string;
+}): Promise<unknown> {
+  const token = getStoredToken();
+
+  const { data } = await api.post(
+    "/api/library/tools/idgenerator/get",
+    params,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
+
+  return data;
+}
+
+/**
+ * Uploads style image file metadata to PLM document service.
+ * Endpoint: POST /api/document/UploadFile/
+ */
+export async function uploadPlmStyleImage(
+  payload: Record<string, unknown>,
+): Promise<any> {
+  const token = getStoredToken();
+  const url = "/api/document/UploadFile/";
+
+  console.log(`[uploadPlmStyleImage] Sending POST request to ${url}`);
+  console.log(`[uploadPlmStyleImage] Authorization exists: ${!!token}`);
+  console.log(`[uploadPlmStyleImage] Payload:`, JSON.stringify(payload, null, 2));
+
+  try {
+    const response = await api.post<any>(
+      url,
+      payload,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    );
+
+    console.log(`[uploadPlmStyleImage] Success response data:`, JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (err: any) {
+    console.error(`[uploadPlmStyleImage] Request failed:`, err);
+    if (err.response) {
+      console.log(`[uploadPlmStyleImage] Error status: ${err.response.status}`);
+      console.log(`[uploadPlmStyleImage] Error response data:`, JSON.stringify(err.response.data, null, 2));
+    }
+    throw err;
+  }
+}
+

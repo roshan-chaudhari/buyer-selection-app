@@ -1,5 +1,5 @@
 import React from "react";
-import { User, Calendar, Plus, Edit, CloudSync } from "lucide-react";
+import { User, Calendar, Plus, Edit, CloudSync, Lock } from "lucide-react";
 import Button from "../../components/Button";
 import type { TableType } from "../../types/table";
 import styles from "./ProjectDetailsPage.module.scss";
@@ -7,6 +7,8 @@ import styles from "./ProjectDetailsPage.module.scss";
 interface ProjectHeaderProps {
   project: TableType;
   isSynced: boolean;
+  isLocked: boolean;
+  isSyncing: boolean;
   selectionDateStr: string;
   onNavigate: (path: string) => void;
   onAddItems: () => void;
@@ -17,6 +19,8 @@ interface ProjectHeaderProps {
 export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   project,
   isSynced,
+  isLocked,
+  isSyncing,
   selectionDateStr,
   onNavigate,
   onAddItems,
@@ -38,6 +42,8 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           variant="outline"
           className={styles.addStylesBtn}
           onClick={onAddItems}
+          disabled={isLocked || isSyncing}
+          title={isLocked ? "Project is read-only" : "Add Items"}
           icon={<Plus size={14} />}
         >
           Add Items
@@ -51,8 +57,14 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
             <div className={styles.titleRow}>
               <h1 className={styles.projectTitle}>{project.ProjectName}</h1>
               <span className={`${styles.statusBadge} ${isSynced ? styles.synced : styles.draft}`}>
-                {isSynced ? "Synchronized" : "Draft"}
+                {isSynced ? "Syncro" : "Draft"}
               </span>
+              {isLocked && (
+                <span className={`${styles.statusBadge} ${styles.locked}`} title="This project is read-only">
+                  <Lock size={11} style={{ marginRight: 3, verticalAlign: "middle" }} />
+                  Read-Only
+                </span>
+              )}
             </div>
             <div className={styles.projectMeta}>
               <div className={styles.metaItem}>
@@ -73,16 +85,17 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
               variant="outline"
               className={styles.editBtn}
               onClick={onSyncProject}
-              disabled={isSynced}
-              title="Synchronize project To PLM"
+              disabled={isSynced || isLocked || isSyncing}
+              title={isLocked ? "Project is read-only" : "Synchronize project To SYNCRO"}
               icon={<CloudSync size={14} />}
             />
             <Button
               variant="outline"
               className={styles.editBtn}
               onClick={onEditMetadata}
+              disabled={isLocked || isSyncing}
               aria-label="Edit project metadata"
-              title="Edit project metadata"
+              title={isLocked ? "Project is read-only" : "Edit project metadata"}
               icon={<Edit size={14} />}
             />
           </div>

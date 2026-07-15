@@ -14,6 +14,11 @@ import styles from './EditItemModal.module.scss';
 
 // ─── Mapping Helpers ──────────────────────────────────────────────────────────
 
+function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string | null {
+  return plmUrl || null;
+}
+
+
 function buildColorwayQueryParams(
   styleId: number | undefined,
   styleMaterialNumber: string,
@@ -153,7 +158,21 @@ export default function EditItemModal({
       setIsLoadingStatus(true);
       try {
         const options = await odata2Service.getLookupOptions(231);
-        if (options.length > 0) setStatusOptions(options);
+        if (options.length > 0) {
+          setStatusOptions(options);
+
+          // Auto-select previously saved Color Status by ID first, then by name
+          if (item.colorStatusId && item.colorStatusId > 0) {
+            const match = options.find(opt => opt.id === item.colorStatusId);
+            if (match) {
+              setColorwayStatus(match.value);
+              setColorStatusId(match.id);
+            }
+          } else if (item.colorwayStatus) {
+            const match = options.find(opt => opt.value === item.colorwayStatus);
+            if (match) setColorStatusId(match.id);
+          }
+        }
       } catch (err) {
         console.error('[EditItemModal] loadStatusOptions failed:', err);
       } finally {
@@ -162,7 +181,7 @@ export default function EditItemModal({
     };
 
     loadStatusOptions();
-  }, [isOpen]);
+  }, [isOpen, item.colorStatusId, item.colorwayStatus]);
 
   // ── Colorway selection handler ──────────────────────────────────────────────
   const handleColorwayChange = (e: { target: { value: string } }) => {
@@ -348,7 +367,7 @@ export default function EditItemModal({
             <div className={styles.editModalThumbnail}>
               {annotatedImage ? (
                 <img
-                  src={annotatedImage}
+                  src={getFirstImage(annotatedImage, plmImageUrl) || ""}
                   alt="Annotation Thumbnail"
                   className={styles.editModalThumbnailImg}
                 />
