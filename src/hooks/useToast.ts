@@ -7,7 +7,11 @@ export interface ToastState {
   type: ToastType;
 }
 
-export function useToast() {
+export function useToast(): {
+  toast: ToastState | null;
+  showToast: (message: string, type?: ToastType) => void;
+  clearToast: () => void;
+} {
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
