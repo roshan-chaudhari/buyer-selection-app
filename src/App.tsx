@@ -38,12 +38,10 @@ function AppRoutes({ token, logout, currentUser, isLoadingUser }: AppRoutesProps
   return (
     <Routes>
       {!token ? (
-        <Route
-          path="*"
-          element={
-            <LoginPage />
-          }
-        />
+        <>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </>
       ) : (
         <Route
           element={
@@ -77,6 +75,8 @@ function AppRoutes({ token, logout, currentUser, isLoadingUser }: AppRoutesProps
             />
 
           </Route>
+          {/* Prevent logged-in users from going back to login screen */}
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           {/* Fallback redirect for authenticated routes */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
