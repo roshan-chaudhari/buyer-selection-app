@@ -191,7 +191,9 @@ function getBase64Image(annotatedImage: string | null | undefined): string | nul
         }
         return String(item);
       }
-    } catch (e) { }
+    } catch {
+      console.log("[useProjectSync] Failed to parse annotated image");
+    }
   }
   return annotatedImage;
 }
@@ -317,85 +319,85 @@ async function processStyleGroup(
 
   // 5.1 add image in new style 
   // console.log("[useProjectSync] group.annotatedImage:", group.annotatedImage, "firstItem.annotatedImage:", firstItem.annotatedImage);
-  const base64Str = getBase64Image(group.annotatedImage || firstItem.annotatedImage);
-  if (base64Str) {
-    let objectFilePath = "";
-    let originalObjectName = "style_image.jpg";
+  // const base64Str = getBase64Image(group.annotatedImage || firstItem.annotatedImage);
+  // if (base64Str) {
+  //   let objectFilePath = "";
+  //   let originalObjectName = "style_image.jpg";
 
-    const iu = localStorage.getItem("iu") || "";
-    const cleanIu = iu.trim().endsWith("/") ? iu.trim() : `${iu.trim()}/`;
-    const uploadImageUrl = cleanIu;
-    console.log("[useProjectSync] Raw iu from localStorage:", iu);
-    console.log("[useProjectSync] uploadImageUrl:", uploadImageUrl);
+  //   const iu = localStorage.getItem("iu") || "";
+  //   const cleanIu = iu.trim().endsWith("/") ? iu.trim() : `${iu.trim()}/`;
+  //   const uploadImageUrl = cleanIu;
+  //   console.log("[useProjectSync] Raw iu from localStorage:", iu);
+  //   console.log("[useProjectSync] uploadImageUrl:", uploadImageUrl);
 
-    let sanitizedUrl = uploadImageUrl;
-    if (sanitizedUrl.startsWith("https:https://")) {
-      sanitizedUrl = sanitizedUrl.replace("https:https://", "https://");
-    } else if (sanitizedUrl.startsWith("http:http://")) {
-      sanitizedUrl = sanitizedUrl.replace("http:http://", "http://");
-    }
-    console.log("[useProjectSync] sanitizedUrl:", sanitizedUrl);
+  //   let sanitizedUrl = uploadImageUrl;
+  //   if (sanitizedUrl.startsWith("https:https://")) {
+  //     sanitizedUrl = sanitizedUrl.replace("https:https://", "https://");
+  //   } else if (sanitizedUrl.startsWith("http:http://")) {
+  //     sanitizedUrl = sanitizedUrl.replace("http:http://", "http://");
+  //   }
+  //   console.log("[useProjectSync] sanitizedUrl:", sanitizedUrl);
 
-    const objGuid = generateUUID();
-    objectFilePath = `blob:${sanitizedUrl}${objGuid}`;
+  //   const objGuid = generateUUID();
+  //   objectFilePath = `blob:${sanitizedUrl}${objGuid}`;
 
-    let rawBase64: string | null = null;
-    if (base64Str.startsWith("data:")) {
-      try {
-        rawBase64 = base64Str.split(",")[1] || null;
-        const mime = base64Str.match(/:(.*?);/)?.[1] || "image/jpeg";
-        const ext = mime.split("/")[1] || "jpg";
-        originalObjectName = `${newStyleName}.${ext}`;
-      } catch (e) {
-        console.error("[useProjectSync] Failed to parse dataURL mime type:", e);
-      }
-    } else {
-      rawBase64 = base64Str;
-      const nameMatch = base64Str.match(/\/([^\/?#]+)$/);
-      if (nameMatch) {
-        originalObjectName = nameMatch[1];
-      }
-    }
+  //   let rawBase64: string | null = null;
+  //   if (base64Str.startsWith("data:")) {
+  //     try {
+  //       rawBase64 = base64Str.split(",")[1] || null;
+  //       const mime = base64Str.match(/:(.*?);/)?.[1] || "image/jpeg";
+  //       const ext = mime.split("/")[1] || "jpg";
+  //       originalObjectName = `${newStyleName}.${ext}`;
+  //     } catch {
+  //       console.error("[useProjectSync] Failed to parse dataURL mime type");
+  //     }
+  //   } else {
+  //     rawBase64 = base64Str;
+  //     const nameMatch = base64Str.match(/\/([^\/?#]+)$/);
+  //     if (nameMatch) {
+  //       originalObjectName = nameMatch[1];
+  //     }
+  //   }
 
-    if (objectFilePath) {
-      const uploadPayload = {
-        objectFilePath,
-        objectExtension: null,
-        sequence: 0,
-        details: {
-          name: null,
-          note: null,
-          dlType: 11,
-          type: "styleImages"
-        },
-        referenceId: Number(newStyleId),
-        modifyDate: "0001-01-01T00:00:00",
-        code: "E0012",
-        isDefault: false,
-        objectId: 0,
-        originalObjectName,
-        objectStream: null,
-        tempId: generateUUID()
-      };
+  //   if (objectFilePath) {
+  //     const uploadPayload = {
+  //       objectFilePath,
+  //       objectExtension: null,
+  //       sequence: 0,
+  //       details: {
+  //         name: null,
+  //         note: null,
+  //         dlType: 11,
+  //         type: "styleImages"
+  //       },
+  //       referenceId: Number(newStyleId),
+  //       modifyDate: "0001-01-01T00:00:00",
+  //       code: "E0012",
+  //       isDefault: false,
+  //       objectId: 0,
+  //       originalObjectName,
+  //       objectStream: null,
+  //       tempId: generateUUID()
+  //     };
 
-      console.log("[useProjectSync] Uploading style image with payload:", JSON.stringify(uploadPayload, null, 2));
+  //     console.log("[useProjectSync] Uploading style image with payload:", JSON.stringify(uploadPayload, null, 2));
 
-      try {
-        // const uploadResponse = await uploadPlmStyleImage(uploadPayload);
-        // console.log("[useProjectSync] Upload image response:", JSON.stringify(uploadResponse, null, 2));
-        // const objectKey = uploadResponse?.objectKey ?? uploadResponse?.data?.objectKey;
-        // console.log(`[useProjectSync] Successfully uploaded image, got objectKey: ${objectKey}`);
-      } catch (uploadErr: any) {
-        console.error("[useProjectSync] Failed to upload style image to PLM:", uploadErr);
-        if (uploadErr.response) {
-          console.log("[useProjectSync] Upload error response status:", uploadErr.response.status);
-          console.log("[useProjectSync] Upload error response data:", JSON.stringify(uploadErr.response.data, null, 2));
-        }
-      }
-    }
-  } else {
-    console.log("[useProjectSync] No annotated image found for style copy. Skipping image upload.");
-  }
+  //     try {
+  //       // const uploadResponse = await uploadPlmStyleImage(uploadPayload);
+  //       // console.log("[useProjectSync] Upload image response:", JSON.stringify(uploadResponse, null, 2));
+  //       // const objectKey = uploadResponse?.objectKey ?? uploadResponse?.data?.objectKey;
+  //       // console.log(`[useProjectSync] Successfully uploaded image, got objectKey: ${objectKey}`);
+  //     } catch (uploadErr: any) {
+  //       console.error("[useProjectSync] Failed to upload style image to PLM:", uploadErr);
+  //       if (uploadErr.response) {
+  //         console.log("[useProjectSync] Upload error response status:", uploadErr.response.status);
+  //         console.log("[useProjectSync] Upload error response data:", JSON.stringify(uploadErr.response.data, null, 2));
+  //       }
+  //     }
+  //   }
+  // } else {
+  //   console.log("[useProjectSync] No annotated image found for style copy. Skipping image upload.");
+  // }
 
   // 6. Fetch full details of the newly created style
   const newStyleDetails = await fetchPlmColorwayDetails(
