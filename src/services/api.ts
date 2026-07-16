@@ -157,6 +157,7 @@ const apiProcessor = <T>(
   meta?: unknown,
   _config: ApiConfig = { showToast: true },
 ): T | ApiResponseWrapper<T> => {
+  void _config;
   if (success) {
     if (Array.isArray(data)) {
       if (meta) {
