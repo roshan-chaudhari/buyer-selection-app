@@ -179,35 +179,35 @@ function _dataURLtoBlob(dataurl: string): Blob {
 }
 */
 
-function getBase64Image(annotatedImage: string | null | undefined): string | null {
-  if (!annotatedImage) return null;
-  if (annotatedImage.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(annotatedImage);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const item = parsed[0];
-        if (item && typeof item === 'object') {
-          return item.annotated || item.original || '';
-        }
-        return String(item);
-      }
-    } catch {
-      console.log("[useProjectSync] Failed to parse annotated image");
-    }
-  }
-  return annotatedImage;
-}
+// function getBase64Image(annotatedImage: string | null | undefined): string | null {
+//   if (!annotatedImage) return null;
+//   if (annotatedImage.startsWith('[')) {
+//     try {
+//       const parsed = JSON.parse(annotatedImage);
+//       if (Array.isArray(parsed) && parsed.length > 0) {
+//         const item = parsed[0];
+//         if (item && typeof item === 'object') {
+//           return item.annotated || item.original || '';
+//         }
+//         return String(item);
+//       }
+//     } catch {
+//       console.log("[useProjectSync] Failed to parse annotated image");
+//     }
+//   }
+//   return annotatedImage;
+// }
 
-function generateUUID(): string {
-  if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
-    return window.crypto.randomUUID();
-  }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
+// function generateUUID(): string {
+//   if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
+//     return window.crypto.randomUUID();
+//   }
+//   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+//     const r = (Math.random() * 16) | 0;
+//     const v = c === "x" ? r : (r & 0x3) | 0x8;
+//     return v.toString(16);
+//   });
+// }
 
 async function processStyleGroup(
   group: GroupedStyle,
