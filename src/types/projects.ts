@@ -10,6 +10,7 @@ export interface ProjectDetailsPageProps {
 export interface GroupedStyle {
   styleMaterialNumber: string;
   styleMaterialName: string;
+  itemType?: 'Style' | 'Material';
   annotatedImage?: string | null;
   selectionCondition: string;
   items: ProjectItem[];

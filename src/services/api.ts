@@ -316,16 +316,18 @@ export const odata2Service = {
 
 export const odata2style = {
   getStyleData: async (
-    params: { StyleId?: number;[key: string]: unknown } = {},
+    params: { StyleId?: number; StyleCode?: string; Name?: string; search?: string; [key: string]: unknown } = {},
   ): Promise<unknown> => {
     const token = getStoredToken();
 
-    const filterParts = Object.entries(params)
-      .map(([key, value]) => {
-        const formattedValue = typeof value === "string" ? `'${value}'` : value;
-        return `${key} eq ${formattedValue}`;
-      })
-      .join(" and ");
+    const filterParts = params.search
+      ? `(StyleCode eq '${String(params.search).replace(/'/g, "''")}' or Name eq '${String(params.search).replace(/'/g, "''")}')`
+      : Object.entries(params)
+          .map(([key, value]) => {
+            const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;
+            return `${key} eq ${formattedValue}`;
+          })
+          .join(" and ");
 
     const queryString = filterParts
       ? `?$filter=IsDeleted eq 0 and ${encodeURIComponent(filterParts)}&$expand=StyleColorways`
@@ -860,11 +862,6 @@ export async function uploadPlmStyleImage(
 ): Promise<any> {
   const token = getStoredToken();
   const url = "/api/document/UploadFile/";
-
-  console.log(`[uploadPlmStyleImage] Sending POST request to ${url}`);
-  console.log(`[uploadPlmStyleImage] Authorization exists: ${!!token}`);
-  console.log(`[uploadPlmStyleImage] Payload:`, JSON.stringify(payload, null, 2));
-
   try {
     const response = await api.post<any>(
       url,
@@ -873,16 +870,254 @@ export async function uploadPlmStyleImage(
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       },
     );
-
-    console.log(`[uploadPlmStyleImage] Success response data:`, JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (err: any) {
-    console.error(`[uploadPlmStyleImage] Request failed:`, err);
     if (err.response) {
       console.log(`[uploadPlmStyleImage] Error status: ${err.response.status}`);
-      console.log(`[uploadPlmStyleImage] Error response data:`, JSON.stringify(err.response.data, null, 2));
     }
     throw err;
   }
+}
+
+export const odata2material = {
+  getMaterialData: async (
+    params: { MaterialId?: number; MaterialCode?: string; MaterialName?: string; search?: string; [key: string]: unknown } = {},
+  ): Promise<unknown> => {
+    const token = getStoredToken();
+    console.log("[odata2material.getMaterialData] Called with params:", JSON.stringify(params, null, 2));
+
+    const filterParts = params.search
+      ? `(MaterialCode eq '${String(params.search).replace(/'/g, "''")}' or MaterialName eq '${String(params.search).replace(/'/g, "''")}')`
+      : Object.entries(params)
+          .map(([key, value]) => {
+            const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;
+            return `${key} eq ${formattedValue}`;
+          })
+          .join(" and ");
+
+    const queryString = filterParts
+      ? `?$filter=IsDeleted eq 0 and ${encodeURIComponent(filterParts)}&$expand=MaterialColorways`
+      : `?$expand=MaterialColorways`;
+
+    const requestUrl = `/api/odata2/MATERIAL${queryString}`;
+
+    try {
+      const response = await api.get(requestUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    } catch (err: any) {
+      if (err.response) {
+        console.error("[odata2material.getMaterialData] Error Response status:", err.response.status);
+      }
+      throw err;
+    }
+  },
+};
+
+export const getPlmMaterialColorwayDetailsGridBody = (
+  finalMaterialId: number | string,
+  schema: string,
+  userId: number | string,
+  roleId: number | string
+) => {
+  return {
+    roleId: Number(roleId),
+    userId: Number(userId),
+    personalizationId: 0,
+    entity: "MaterialColorways",
+    pageType: "list",
+    dataFilter: {
+      Conditions: [
+        {
+          fieldName: "MaterialId",
+          operator: "=",
+          value: Number(finalMaterialId),
+        },
+      ],
+    },
+    includeLookups: false,
+    pageInfo: null,
+    moduleCaller: "list",
+    Schema: schema,
+  };
+};
+
+export async function fetchPlmMaterialColorways(
+  materialId: number | string,
+  currentUser: any
+): Promise<any[] | null> {
+  if (!materialId || !currentUser) return null;
+
+  const schema = currentUser.activeSchema;
+  const userId = currentUser.userId;
+  const roleId = currentUser.activeRoleId;
+
+  const body = getPlmMaterialColorwayDetailsGridBody(materialId, schema, userId, roleId);
+  const token = getStoredToken();
+
+  try {
+    const response = await api.post<any>(
+      "/api/odata2/view/layout/data/get",
+      body,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+
+    const responseData = response.data;
+
+    if (!responseData) return null;
+    const entities: any[] = responseData.entities || responseData.d?.entities || [];
+    const colorways = entities
+      .filter((e: any) => e && (e.name === "MaterialColorways" || e.Name === "MaterialColorways"))
+      .map((e: any) => e.column || e.Column)
+      .filter((c: any) => c != null);
+
+    return colorways;
+  } catch (err) {
+    console.error(`[fetchPlmMaterialColorways] Failed to fetch colorways for MaterialId ${materialId}:`, err);
+    throw err;
+  }
+}
+
+export const getPlmMaterialAttachmentGridBody = (
+  finalMaterialId: number | string,
+  schema: string,
+  userId: number | string,
+  roleId: number | string
+) => {
+  return {
+    roleId: Number(roleId),
+    userId: Number(userId),
+    mainEntity: "Material",
+    entities: [
+      {
+        ignoreMetadata: false,
+        searchable: [],
+        dataFilter: {
+          Conditions: [
+            {
+              fieldName: "MaterialId",
+              operator: "=",
+              value: String(finalMaterialId),
+            },
+          ],
+        },
+        parent: null,
+        name: "Material",
+        sortInfo: null,
+        extendedFields: [],
+        lookupRef: [],
+        columns: [
+          "MaterialCode",
+          "MaterialName",
+          "Description",
+          "MaterialId",
+          "RowVersion",
+          "RowVersionText",
+          "IsDeleted",
+        ],
+      },
+      {
+        ignoreMetadata: false,
+        searchable: null,
+        dataFilter: null,
+        sortInfos: null,
+        parent: "Attachments",
+        name: "AttaDetail",
+        sortInfo: null,
+        extendedFields: [],
+        lookupRef: null,
+        columns: [
+          "AttaDetailsId",
+          "AttaFileListId",
+          "DtlType",
+          "Name",
+          "Comment",
+          "Value",
+        ],
+        pageInfo: null,
+      },
+    ],
+    lookups: [],
+    includeLookups: true,
+    pageType: "details",
+    isNewRecord: false,
+    Schema: schema,
+  };
+};
+
+export async function fetchPlmMaterialDetails(
+  materialId: number | string,
+  currentUser: any
+): Promise<Record<string, unknown> | null> {
+  if (!materialId || !currentUser) return null;
+
+  const schema = currentUser.activeSchema;
+  const userId = currentUser.userId;
+  const roleId = currentUser.activeRoleId;
+
+  const body = getPlmMaterialAttachmentGridBody(materialId, schema, userId, roleId);
+  const token = getStoredToken();
+
+  try {
+    const response = await api.post<any>(
+      "/api/odata2/view/entity/data/get",
+      body,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+
+    const responseData = response.data;
+    if (!responseData) return null;
+
+    const entities: any[] = responseData.entities || responseData.d?.entities || [];
+    const materialEntity = entities.find(
+      (e: any) => e.name === "Material" || e.Name === "Material"
+    );
+    if (!materialEntity) return null;
+
+    const column = materialEntity.column || materialEntity.Column;
+    return (column as Record<string, unknown>) ?? null;
+  } catch (err) {
+    console.error(`[fetchPlmMaterialDetails] Failed to fetch material details for MaterialId ${materialId}:`, err);
+    throw err;
+  }
+}
+
+export async function savePlmMaterialColorways(
+  payload: Record<string, unknown>
+): Promise<any> {
+  const token = getStoredToken();
+  const url = "/api/pdm/material/colorways/save";
+  try {
+    const response = await api.post<any>(
+      url,
+      payload,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+    return response.data;
+  } catch (err) {
+    console.error(`[savePlmMaterialColorways] Failed to save material colorways:`, err);
+    throw err;
+  }
+}
+
+export async function savePlmStyleOverview(
+  payload: Record<string, unknown>
+): Promise<any> {
+  const token = getStoredToken();
+  const { data } = await api.post(
+    "/api/pdm/style/v2/save",
+    payload,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }
+  );
+  return data;
 }
 

@@ -45,6 +45,7 @@ export function groupItemsByStyle(items: ProjectItem[]): GroupedStyle[] {
     return {
       styleMaterialNumber,
       styleMaterialName: first.styleMaterialName || "",
+      itemType: first.itemType || 'Style',
       annotatedImage: styleItems.find((it) => it.annotatedImage)?.annotatedImage ?? first.annotatedImage,
       selectionCondition: first.selectionCondition || "As-Is",
       items: styleItems,
@@ -79,12 +80,14 @@ export function sortGroupedStyles(
 }
 
 export async function extractColorwaysFromPlmResponse(
-  response: RawODataEnvelope | RawStyleObject[] | RawStyleObject
+  response: any
 ): Promise<ColorwayOption[]> {
-  const styleList = extractODataList<RawStyleObject>(response);
+  const styleList = extractODataList<any>(response);
   if (styleList.length === 0) return [];
 
-  const rawColorways = extractODataList<RawStyleColorway>(styleList[0].StyleColorways);
+  const firstNode = styleList[0];
+  const colorwaysNode = firstNode.StyleColorways || firstNode.MaterialColorways || firstNode.MaterialColorway || [];
+  const rawColorways = extractODataList<any>(colorwaysNode);
   const mapped = rawColorways
     .map((cw) => {
       const val = cw.Name ?? "";
@@ -94,7 +97,7 @@ export async function extractColorwaysFromPlmResponse(
       return {
         value: val,
         label: cw.Code ? `${cw.Code} - ${val}` : val,
-        colorwayId: cw.StyleColorwayId ?? 0,
+        colorwayId: cw.StyleColorwayId ?? cw.MaterialColorwayId ?? cw.MaterialColorwayID ?? cw.Id ?? cw.id ?? 0,
       };
     })
     .filter((opt): opt is ColorwayOption => opt !== null);

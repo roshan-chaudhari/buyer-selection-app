@@ -203,6 +203,7 @@ export interface ProjectItem {
   colorId?: number;
   styleMaterialNumber: string;
   styleMaterialName: string;
+  itemType?: 'Style' | 'Material';
   colorway: string;
   colorwayStatus: string;
   colorStatusId?: number;

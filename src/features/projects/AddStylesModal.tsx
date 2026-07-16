@@ -6,8 +6,7 @@ import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { projectService, type ProjectItem } from '../../services/projectService';
 import type { TableType } from '../../types/table';
-import { odata2style } from '../../services/api';
-import type { StyleObject } from '../../types/api';
+import { odata2style, odata2material } from '../../services/api';
 import { extractODataList } from '../../utils/odata';
 import styles from './AddStylesModal.module.scss';
 
@@ -116,10 +115,10 @@ export default function AddStylesModal({
   };
 
   /**
-   * Fetches the style details from the OData Service and validates its existence.
+   * Fetches the style/material details from the OData Service and validates its existence.
    * Throws detailed errors if validation fails or duplicates are found.
    */
-  const fetchAndValidateStyle = useCallback(async (code: string, skipDuplicateCheck = false): Promise<StyleObject & Record<string, unknown>> => {
+  const fetchAndValidateStyle = useCallback(async (code: string, skipDuplicateCheck = false): Promise<{ styleObj: any; itemType: 'Style' | 'Material' }> => {
     if (!skipDuplicateCheck) {
       // Check for duplicate in current project items
       const isDuplicateInProject = existingItems?.some(
@@ -130,38 +129,77 @@ export default function AddStylesModal({
       }
     }
 
-    // Determine parameter: numeric-only -> StyleId; alphanumeric -> StyleCode
+    // Determine parameter: numeric-only -> ID; alphanumeric -> Code
     const isNum = code.length > 0 && /^\d+$/.test(code);
-    const queryParams: { StyleId?: number; StyleCode?: string } = isNum 
-      ? { StyleId: Number(code) } 
-      : { StyleCode: code };
 
-    const response = await odata2style.getStyleData(queryParams);
-    
-    // Normalize wrapped OData formats (e.g. value, d.results, array, or object)
-    const styleList = extractODataList<StyleObject>(response);
+    // 1. Try style lookup
+    try {
+      const styleQueryParams = isNum 
+        ? { StyleId: Number(code) } 
+        : { search: code };
 
-    if (styleList.length === 0) {
-      throw new Error('Style not found.');
+      const response = await odata2style.getStyleData(styleQueryParams);
+      const styleList = extractODataList<any>(response);
+
+      if (styleList.length > 0) {
+        return {
+          styleObj: styleList[0],
+          itemType: 'Style' as const
+        };
+      }
+    } catch (err) {
+      console.log('[AddStylesModal] Style lookup failed, checking material...', err);
     }
 
-    return styleList[0] as StyleObject & Record<string, unknown>;
+    // 2. Try material lookup
+    try {
+      const materialQueryParams = isNum 
+        ? { MaterialId: Number(code) } 
+        : { search: code };
+
+      console.log('[AddStylesModal] Initiating Material lookup with query params:', JSON.stringify(materialQueryParams, null, 2));
+      const response = await odata2material.getMaterialData(materialQueryParams);
+      console.log('[AddStylesModal] Material lookup response received:', response ? 'Yes (length: ' + JSON.stringify(response).length + ')' : 'No');
+      const materialList = extractODataList<any>(response);
+      console.log('[AddStylesModal] Extracted materialList count:', materialList.length);
+
+      if (materialList.length > 0) {
+        console.log('[AddStylesModal] Found Material in PLM:', JSON.stringify(materialList[0], null, 2));
+        return {
+          styleObj: materialList[0],
+          itemType: 'Material' as const
+        };
+      } else {
+        console.log('[AddStylesModal] Material list is empty for code:', code);
+      }
+    } catch (err) {
+      console.error('[AddStylesModal] Material lookup failed with error:', err);
+    }
+
+    throw new Error('Item not found as Style or Material in PLM.');
   }, [existingItems]);
 
   /** Returns today's date as a YYYY-MM-DD string. */
   const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
   /**
-   * Maps Infor OData Style metadata to the database schema structure.
+   * Maps Infor OData Style/Material metadata to the database schema structure.
    */
-  const mapODataStyleToItemPayload = useCallback((code: string, styleObj: StyleObject & Record<string, unknown>): Omit<ProjectItem, 'id' | 'projectId'> => {
-    const styleNameStr = (styleObj.Name as string) || code.replace(/^QR-/, '');
+  const mapODataStyleToItemPayload = useCallback((
+    code: string, 
+    styleObj: any,
+    itemType: 'Style' | 'Material'
+  ): Omit<ProjectItem, 'id' | 'projectId'> => {
+    const styleNameStr = (styleObj.Name as string) || (styleObj.MaterialName as string) || (styleObj.Description as string) || code.replace(/^QR-/, '');
+    const styleId = styleObj.StyleId || styleObj.MaterialId || styleObj.Id || 0;
+    const styleMaterialNum = itemType === 'Style' ? (styleObj.StyleCode || code) : (styleObj.MaterialCode || code);
 
     return {
-      styleId: styleObj.StyleId || 0,
+      styleId: Number(styleId),
       colorId: 0,
-      styleMaterialNumber: code,
+      styleMaterialNumber: styleMaterialNum,
       styleMaterialName: styleNameStr,
+      itemType: itemType,
       colorway: '',
       colorwayStatus: 'Pending',
       selectionCondition: 'As-Is',
@@ -186,8 +224,8 @@ export default function AddStylesModal({
 
     setIsAddingStyle(true);
     try {
-      const plmStyle = await fetchAndValidateStyle(styleNumber);
-      const payload = mapODataStyleToItemPayload(styleNumber, plmStyle);
+      const { styleObj, itemType } = await fetchAndValidateStyle(styleNumber);
+      const payload = mapODataStyleToItemPayload(styleNumber, styleObj, itemType);
       await projectService.addItemToProject(project.id!, payload);
 
       const allProjects = await projectService.getAllProjects();

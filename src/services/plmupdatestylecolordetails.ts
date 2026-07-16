@@ -2,7 +2,6 @@ import { api } from "./api";
 import { getStoredToken } from "../auth/tokenUtils";
 import type { ProjectItem } from "./projectService";
 
-
 export interface StyleColorwayDtoItem {
   Id: number;
   FieldValues: {
@@ -11,7 +10,6 @@ export interface StyleColorwayDtoItem {
   }[];
   colorContent: any[];
 }
-
 export interface SaveColorwayRequestPayload {
   styleID: number;
   StyleColorwayDto: StyleColorwayDtoItem[];
@@ -104,7 +102,7 @@ export function buildSaveColorwayPayload(params: {
         value: Number(projItem.colorStatusId ?? plmColorway.ColorwayStatus ?? 1)
       },
       {
-        fieldName: "Date3",
+        fieldName: "Date4",
         value: formatDateToMMDDYYYY(projItem.sampleDue)
       }
 
