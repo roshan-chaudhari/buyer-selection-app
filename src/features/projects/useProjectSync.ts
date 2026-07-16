@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
+import { getStoredToken } from "../../auth/tokenUtils";
 import {
+  api,
   fetchPlmStyleDetails,
   odata2styleCopy,
   createPlmJobTask,
@@ -228,7 +230,6 @@ async function processStyleGroup(
     console.warn(`[useProjectSync] fetchPlmStyleDetails returned null for StyleId ${resolvedStyleId}. Exiting processStyleGroup.`);
     return;
   }
-
   // 1. Extract style input and build copy payload
   const styleInput = extractStyleInputFromNode(styleNode);
   styleInput.selectionCondition = firstItem.selectionCondition;
@@ -486,6 +487,86 @@ export function useProjectSync({
       const totalColorways = latestItems.filter((i) => !!i.colorway).length;
 
       console.log("[useProjectSync] Style breakdown:", groups);
+
+      // 0. Create Project in Plm and add all style in that projects
+      if (currentUser) {
+        try {
+          console.log("[useProjectSync] Step 0: Creating project in PLM...", project.ProjectName);
+          const createPayload = {
+            project: {
+              projectId: "0",
+              code: project.ProjectName,
+              name: project.ProjectName,
+              description: project.Description ?? "",
+              projectDetail: []
+            },
+            roleId: Number(currentUser.activeRoleId ?? 1005),
+            modifyId: Number(currentUser.userId),
+            userId: Number(currentUser.userId),
+            Schema: currentUser.activeSchema
+          };
+
+          console.log("[useProjectSync] Sending project create payload:", JSON.stringify(createPayload, null, 2));
+          const createRes = await api.post<any>("/api/pdm/project/save", createPayload, {
+            headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}
+          });
+          console.log("[useProjectSync] Project create response:", JSON.stringify(createRes.data, null, 2));
+
+          const resData = createRes.data;
+          const key = resData?.key ?? resData?.data?.key;
+          const firstRowVersion = resData?.rowVersionText ?? resData?.data?.rowVersionText;
+
+          if (key && firstRowVersion) {
+            const projectDetail = [];
+            let index = 1;
+            for (const group of groups) {
+              const firstItem = group.items[0];
+              if (!firstItem) continue;
+              const resolvedStyleId = await resolveGroupStyleId(firstItem, group);
+              if (resolvedStyleId) {
+                projectDetail.push({
+                  ProjectDetailId: -index,
+                  ProjectId: String(key),
+                  ItemId: resolvedStyleId,
+                  ItemName: group.styleMaterialName || firstItem.styleMaterialName || "",
+                  ItemNumber: group.styleMaterialNumber,
+                  Type: "Style"
+                });
+                index++;
+              }
+            }
+
+            if (projectDetail.length > 0) {
+              const updatePayload = {
+                project: {
+                  projectId: String(key),
+                  code: project.ProjectName,
+                  name: project.ProjectName,
+                  description: project.Description ?? "",
+                  projectDetail
+                },
+                rowVersionText: firstRowVersion,
+                roleId: Number(currentUser.activeRoleId ?? 1005),
+                modifyId: Number(currentUser.userId),
+                userId: Number(currentUser.userId),
+                Schema: currentUser.activeSchema
+              };
+
+              console.log("[useProjectSync] Sending project update payload with styles:", JSON.stringify(updatePayload, null, 2));
+              const updateRes = await api.post<any>("/api/pdm/project/save", updatePayload, {
+                headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}
+              });
+              console.log("[useProjectSync] Project update response:", JSON.stringify(updateRes.data, null, 2));
+            } else {
+              console.warn("[useProjectSync] No styles resolved to construct projectDetail.");
+            }
+          } else {
+            console.error("[useProjectSync] PLM Project save did not return key or rowVersionText.");
+          }
+        } catch (projErr) {
+          console.error("[useProjectSync] Step 0: Failed to create project or add styles in PLM:", projErr);
+        }
+      }
 
       for (const group of groups) {
         if (!group.items[0] || !currentUser) continue;

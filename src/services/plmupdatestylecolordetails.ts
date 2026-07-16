@@ -40,6 +40,29 @@ export function buildSaveColorwayPayload(params: {
 }): SaveColorwayRequestPayload {
   const userId = Number(params.currentUser.userId);
   
+  const formatDateToMMDDYYYY = (dateStr?: string | null) => {
+    if (!dateStr) {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    }
+    // Fallback split logic
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[1]}/${parts[2].split('T')[0]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
+
   const dtoList = params.matchedColorways.map(({ plmColorway, projItem }) => {
     const styleColorwayId = plmColorway.StyleColorwayId ?? plmColorway.StyleColorwayID ?? plmColorway.id;
     
@@ -65,7 +88,7 @@ export function buildSaveColorwayPayload(params: {
         value: Number(params.newStyleId)
       },
       {
-        fieldName: "FreeFieldThree",
+        fieldName: "FreeFieldSix",
         value: projItem.buyerComments || ""
       },
       {
@@ -73,13 +96,18 @@ export function buildSaveColorwayPayload(params: {
         value: Number(projItem.colorStatusId ?? plmColorway.Status ?? 1)
       },
       {
-        fieldName: "FreeFieldSix",
+        fieldName: "FreeFieldSeven",
         value: projItem.internalComments || ""
       },
       {
         fieldName: "ColorwayStatus",
         value: Number(projItem.colorStatusId ?? plmColorway.ColorwayStatus ?? 1)
+      },
+      {
+        fieldName: "Date3",
+        value: formatDateToMMDDYYYY(projItem.sampleDue)
       }
+
     ];
 
     return {
