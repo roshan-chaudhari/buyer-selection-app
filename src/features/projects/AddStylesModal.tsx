@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Camera, QrCode, AlertCircle } from 'lucide-react';
 import Modal from '../../components/Modal';
 import Button from '../../components/Button';
@@ -101,12 +101,131 @@ export default function AddStylesModal({
     };
   }, [isScanning, isOpen]);
 
+
+
+
+  const handleManualInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      const form = e.currentTarget.closest('form');
+      if (form) {
+        form.requestSubmit();
+      }
+    }
+  };
+
+  /**
+   * Fetches the style details from the OData Service and validates its existence.
+   * Throws detailed errors if validation fails or duplicates are found.
+   */
+  const fetchAndValidateStyle = useCallback(async (code: string, skipDuplicateCheck = false): Promise<StyleObject & Record<string, unknown>> => {
+    if (!skipDuplicateCheck) {
+      // Check for duplicate in current project items
+      const isDuplicateInProject = existingItems?.some(
+        (item) => item.styleMaterialNumber.toLowerCase() === code.toLowerCase()
+      );
+      if (isDuplicateInProject) {
+        throw new Error(`Item "${code}" already exists in this project`);
+      }
+
+      // Check for duplicate in current scan list
+      const isDuplicateInScanned = scannedItems.some(
+        (item) => item.toLowerCase() === code.toLowerCase()
+      );
+      if (isDuplicateInScanned) {
+        throw new Error(`Item "${code}" is already in the list to be added`);
+      }
+    }
+
+    if (code.startsWith('QR-ITEM-')) {
+      return {
+        StyleId: Math.floor(10000 + Math.random() * 90000),
+        Name: `Simulated Style ${code.replace(/^QR-ITEM-/, '')}`,
+        StyleCode: code,
+      } as any;
+    }
+
+    // Determine parameter: numeric-only -> StyleId; alphanumeric -> StyleCode
+    const isNum = code.length > 0 && /^\d+$/.test(code);
+    const queryParams: { StyleId?: number; StyleCode?: string } = isNum 
+      ? { StyleId: Number(code) } 
+      : { StyleCode: code };
+
+    const response = await odata2style.getStyleData(queryParams);
+    
+    // Normalize wrapped OData formats (e.g. value, d.results, array, or object)
+    const styleList = extractODataList<StyleObject>(response);
+
+    if (styleList.length === 0) {
+      throw new Error('Style not found.');
+    }
+
+    return styleList[0] as StyleObject & Record<string, unknown>;
+  }, [existingItems, scannedItems]);
+
+  /** Returns today's date as a YYYY-MM-DD string. */
+  const getTodayDateString = () => new Date().toISOString().split('T')[0];
+
+  /**
+   * Maps Infor OData Style metadata to the database schema structure.
+   */
+  const mapODataStyleToItemPayload = useCallback((code: string, styleObj: StyleObject & Record<string, unknown>): Omit<ProjectItem, 'id' | 'projectId'> => {
+    const styleNameStr = (styleObj.Name as string) || code.replace(/^QR-/, '');
+
+    return {
+      styleId: styleObj.StyleId || 0,
+      colorId: 0,
+      styleMaterialNumber: code,
+      styleMaterialName: styleNameStr,
+      colorway: '',
+      colorwayStatus: 'Pending',
+      selectionCondition: 'As-Is',
+      sampleDue: getTodayDateString(),
+      buyerComments: '',
+      internalComments: '',
+    };
+  }, []);
+
+  /**
+   * Validates, structures, and adds a Style Number to the project.
+   */
+  const manualQrInput = useCallback(async (code: string) => {
+    if (!project?.id || !code.trim()) return;
+
+    setIsAddingStyle(true);
+    try {
+      const plmStyle = await fetchAndValidateStyle(code);
+      const payload = mapODataStyleToItemPayload(code, plmStyle);
+      await projectService.addItemToProject(project.id!, payload);
+
+      const allProjects = await projectService.getAllProjects();
+      const updated = allProjects.find((p) => p.id === project.id);
+      if (updated) onAddStyles(updated);
+      onClose();
+    } catch (err) {
+      console.error('[AddStylesModal] Failed to add style via manualQrInput:', err);
+      onError?.(err instanceof Error ? err.message : 'Style not found.');
+    } finally {
+      setIsAddingStyle(false);
+    }
+  }, [project, fetchAndValidateStyle, mapODataStyleToItemPayload, onAddStyles, onClose, onError]);
+
+  const handleAddStyle = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const manualCode = manualInput.trim();
+    if (manualCode) {
+      await manualQrInput(manualCode);
+    }
+  };
+
   // Simulate barcode scanning intervals when scanner is active
   useEffect(() => {
     let timerId: ReturnType<typeof setInterval> | null = null;
 
     if (isScanning && isOpen) {
-      timerId = setInterval(() => {
+      timerId = setInterval(async () => {
         const randId = Math.floor(1000 + Math.random() * 9000);
         const itemCode = `QR-ITEM-${randId}`;
 
@@ -126,6 +245,8 @@ export default function AddStylesModal({
           setTimeout(() => {
             setLastScannedItem(null);
           }, 2000);
+
+          await manualQrInput(itemCode);
         }
       }, 3000);
     }
@@ -133,146 +254,7 @@ export default function AddStylesModal({
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isScanning, isOpen, existingItems, scannedItems]);
-
-
-  const handleManualInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      const form = e.currentTarget.closest('form');
-      if (form) {
-        form.requestSubmit();
-      }
-    }
-  };
-
-  /**
-   * Fetches the style details from the OData Service and validates its existence.
-   * Throws detailed errors if validation fails or duplicates are found.
-   */
-  const fetchAndValidateStyle = async (code: string, skipDuplicateCheck = false): Promise<StyleObject & Record<string, unknown>> => {
-    if (!skipDuplicateCheck) {
-      // Check for duplicate in current project items
-      const isDuplicateInProject = existingItems?.some(
-        (item) => item.styleMaterialNumber.toLowerCase() === code.toLowerCase()
-      );
-      if (isDuplicateInProject) {
-        throw new Error(`Item "${code}" already exists in this project`);
-      }
-
-      // Check for duplicate in current scan list
-      const isDuplicateInScanned = scannedItems.some(
-        (item) => item.toLowerCase() === code.toLowerCase()
-      );
-      if (isDuplicateInScanned) {
-        throw new Error(`Item "${code}" is already in the list to be added`);
-      }
-    }
-
-    // Determine parameter: numeric-only -> StyleId; alphanumeric -> StyleCode
-    const isNum = code.length > 0 && /^\d+$/.test(code);
-    const queryParams: { StyleId?: number; StyleCode?: string } = isNum 
-      ? { StyleId: Number(code) } 
-      : { StyleCode: code };
-
-    const response = await odata2style.getStyleData(queryParams);
-    
-    // Normalize wrapped OData formats (e.g. value, d.results, array, or object)
-    const styleList = extractODataList<StyleObject>(response);
-
-    if (styleList.length === 0) {
-      throw new Error('Style not found.');
-    }
-
-    return styleList[0] as StyleObject & Record<string, unknown>;
-  };
-
-  /** Returns today's date as a YYYY-MM-DD string. */
-  const getTodayDateString = () => new Date().toISOString().split('T')[0];
-
-  /**
-   * Maps Infor OData Style metadata to the database schema structure.
-   */
-  const mapODataStyleToItemPayload = (code: string, styleObj: StyleObject & Record<string, unknown>): Omit<ProjectItem, 'id' | 'projectId'> => {
-    const styleNameStr = (styleObj.Name as string) || code.replace(/^QR-/, '');
-
-    return {
-      styleId: styleObj.StyleId || 0,
-      colorId: 0,
-      styleMaterialNumber: code,
-      styleMaterialName: styleNameStr,
-      colorway: '',
-      colorwayStatus: 'Pending',
-      selectionCondition: 'As-Is',
-      sampleDue: getTodayDateString(),
-      buyerComments: '',
-      internalComments: '',
-    };
-  };
-
-  const handleAddStyle = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const manualCode = manualInput.trim();
-    const scannedCodes = [...scannedItems];
-
-    if (!project?.id || (scannedCodes.length === 0 && !manualCode)) return;
-
-    setIsAddingStyle(true);
-    try {
-      let plmStyle: (StyleObject & Record<string, unknown>) | null = null;
-      if (manualCode) {
-        plmStyle = await fetchAndValidateStyle(manualCode);
-      }
-
-      const todayStr = getTodayDateString();
-
-      if (scannedCodes.length > 0) {
-        await Promise.all(
-          scannedCodes.map(async (code) => {
-            let styleId = 0;
-            let styleMaterialName = code.replace(/^QR-/, '');
-            try {
-              const plmStyle = await fetchAndValidateStyle(code, true);
-              if (plmStyle) {
-                styleId = plmStyle.StyleId || 0;
-                styleMaterialName = (plmStyle.Name as string) || styleMaterialName;
-              }
-            } catch (err) {
-              console.warn(`[AddStylesModal] Failed to resolve scanned code ${code} against PLM:`, err);
-            }
-            return projectService.addItemToProject(project.id!, {
-              styleId,
-              styleMaterialNumber: code,
-              styleMaterialName,
-              colorway: '',
-              colorwayStatus: 'Pending',
-              selectionCondition: 'As-Is',
-              sampleDue: todayStr,
-              buyerComments: '',
-              internalComments: '',
-            });
-          })
-        );
-      }
-
-      if (manualCode && plmStyle) {
-        const payload = mapODataStyleToItemPayload(manualCode, plmStyle);
-        await projectService.addItemToProject(project.id!, payload);
-      }
-
-      const allProjects = await projectService.getAllProjects();
-      const updated = allProjects.find((p) => p.id === project.id);
-      if (updated) onAddStyles(updated);
-      onClose();
-    } catch (err) {
-      console.error('[AddStylesModal] Failed to add styles:', err);
-      onError?.(err instanceof Error ? err.message : 'Style not found.');
-    } finally {
-      setIsAddingStyle(false);
-    }
-  };
+  }, [isScanning, isOpen, existingItems, scannedItems, manualQrInput]);
 
   return (
     <Modal 
