@@ -2,14 +2,13 @@ import { useState, useCallback, useEffect } from "react";
 import { projectService, type ProjectItem } from "../../services/projectService";
 import { getStoredToken } from "../../auth/tokenUtils";
 import type { TableType } from "../../types/table";
-
 import type { ToastType } from "../../hooks/useToast";
-type ShowToastFn = (message: string, type?: ToastType) => void;
+
 
 interface UseProjectLoadingProps {
   projectName: string;
   navigate: (path: string) => void;
-  showToast: ShowToastFn;
+  showToast: (message: string, type?: ToastType) => void;
 }
 
 export function useProjectLoading({ projectName, navigate, showToast }: UseProjectLoadingProps) {
