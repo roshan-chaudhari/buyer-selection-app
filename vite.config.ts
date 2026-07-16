@@ -64,7 +64,14 @@ export default defineConfig({
     }
   },
   build: {
+    cssMinify: 'esbuild',
     chunkSizeWarningLimit: 1500
+  },
+  esbuild: {
+    logOverride: {
+      'unsupported-css-property': 'silent',
+      'css-syntax-error': 'silent'
+    }
   },
   server: {
     proxy: {
