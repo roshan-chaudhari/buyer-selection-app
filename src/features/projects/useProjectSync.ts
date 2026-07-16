@@ -7,7 +7,7 @@ import {
   createPlmJobTask,
   getPlmJobTaskItems,
   fetchPlmColorwayDetails,
-  uploadPlmStyleImage,
+  // uploadPlmStyleImage,
 } from "../../services/api";
 import { materialSyncService } from "../../services/sync/material/materialSync.service";
 import { styleOverviewService } from "../../services/sync/style/styleOverview.service";
