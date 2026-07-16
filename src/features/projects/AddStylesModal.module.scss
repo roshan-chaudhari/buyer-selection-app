@@ -247,3 +247,40 @@
   0%   { background-color: rgba(16, 185, 129, 0.2); }
   100% { background-color: transparent; }
 }
+
+.scannerButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.fileUploadWrapper {
+  display: inline-block;
+}
+
+.fileUploadLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  background-color: var(--color-bg-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  color: var(--color-text-main, #111827);
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: var(--color-bg-main, #f3f4f6);
+    border-color: var(--color-border-hover, #cbd5e1);
+  }
+}
+
+.fileInputHidden {
+  display: none;
+}
+

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import jsQR from 'jsqr';
 import { Plus, Camera, QrCode, AlertCircle } from 'lucide-react';
 import Modal from '../../components/Modal';
 import Button from '../../components/Button';
@@ -28,7 +29,7 @@ export default function AddStylesModal({
   onError,
 }: AddStylesModalProps) {
   const [isAddingStyle, setIsAddingStyle] = useState(false);
-  const [scannedItems, setScannedItems] = useState<string[]>([]);
+
 
   // Scanner & Manual entry inside Add Styles Modal
   const [manualInput, setManualInput] = useState('');
@@ -103,7 +104,6 @@ export default function AddStylesModal({
 
 
 
-
   const handleManualInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -128,22 +128,6 @@ export default function AddStylesModal({
       if (isDuplicateInProject) {
         throw new Error(`Item "${code}" already exists in this project`);
       }
-
-      // Check for duplicate in current scan list
-      const isDuplicateInScanned = scannedItems.some(
-        (item) => item.toLowerCase() === code.toLowerCase()
-      );
-      if (isDuplicateInScanned) {
-        throw new Error(`Item "${code}" is already in the list to be added`);
-      }
-    }
-
-    if (code.startsWith('QR-ITEM-')) {
-      return {
-        StyleId: Math.floor(10000 + Math.random() * 90000),
-        Name: `Simulated Style ${code.replace(/^QR-ITEM-/, '')}`,
-        StyleCode: code,
-      } as any;
     }
 
     // Determine parameter: numeric-only -> StyleId; alphanumeric -> StyleCode
@@ -162,7 +146,7 @@ export default function AddStylesModal({
     }
 
     return styleList[0] as StyleObject & Record<string, unknown>;
-  }, [existingItems, scannedItems]);
+  }, [existingItems]);
 
   /** Returns today's date as a YYYY-MM-DD string. */
   const getTodayDateString = () => new Date().toISOString().split('T')[0];
@@ -193,10 +177,17 @@ export default function AddStylesModal({
   const manualQrInput = useCallback(async (code: string) => {
     if (!project?.id || !code.trim()) return;
 
+    let styleNumber = code.trim();
+    // Parse the QR code response format (e.g. Style Number:WS260041,Style Name:DMAGIC,Brand:Crossline)
+    const match = styleNumber.match(/Style\s+Number\s*:\s*([^,]+)/i);
+    if (match) {
+      styleNumber = match[1].trim();
+    }
+
     setIsAddingStyle(true);
     try {
-      const plmStyle = await fetchAndValidateStyle(code);
-      const payload = mapODataStyleToItemPayload(code, plmStyle);
+      const plmStyle = await fetchAndValidateStyle(styleNumber);
+      const payload = mapODataStyleToItemPayload(styleNumber, plmStyle);
       await projectService.addItemToProject(project.id!, payload);
 
       const allProjects = await projectService.getAllProjects();
@@ -220,41 +211,121 @@ export default function AddStylesModal({
     }
   };
 
-  // Simulate barcode scanning intervals when scanner is active
+  const handleQrImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+          if (qrCode && qrCode.data) {
+            playBeep();
+            const rawCode = qrCode.data.trim();
+            setLastScannedItem(rawCode);
+            setTimeout(() => {
+              setLastScannedItem(null);
+            }, 3000);
+            await manualQrInput(rawCode);
+          } else {
+            console.error('[AddStylesModal] No QR code found in the uploaded image.');
+            onError?.('No QR code found in the uploaded image.');
+          }
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Continuous scanning loop using requestAnimationFrame when camera is active
+  useEffect(() => {
+    let animationFrameId: number;
+    let canvas: HTMLCanvasElement | null = null;
+    let context: CanvasRenderingContext2D | null = null;
+
+    const scanFrame = async () => {
+      if (!isScanning || !isOpen) return;
+
+      const video = videoRef.current;
+      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        if (!context) {
+          context = canvas.getContext('2d');
+        }
+
+        if (context) {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+
+          if (qrCode && qrCode.data) {
+            const rawCode = qrCode.data.trim();
+            console.log('[AddStylesModal] 📷 Decoded QR code from camera stream:', rawCode);
+
+            playBeep();
+            setLastScannedItem(rawCode);
+            setTimeout(() => {
+              setLastScannedItem(null);
+            }, 3000);
+
+            setIsScanning(false);
+            await manualQrInput(rawCode);
+            return;
+          }
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(scanFrame);
+    };
+
+    if (isScanning && isOpen && hasCameraPermission) {
+      animationFrameId = requestAnimationFrame(scanFrame);
+    }
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isScanning, isOpen, hasCameraPermission, manualQrInput]);
+
+  // Simulate barcode scanning intervals when scanner is active but camera is not available
   useEffect(() => {
     let timerId: ReturnType<typeof setInterval> | null = null;
 
-    if (isScanning && isOpen) {
+    if (isScanning && isOpen && !hasCameraPermission) {
       timerId = setInterval(async () => {
-        const randId = Math.floor(1000 + Math.random() * 9000);
-        const itemCode = `QR-ITEM-${randId}`;
+        // Simulating a valid QR response string for A10001 which is present in PLM mock database
+        const itemCode = 'Style Number:A10001,Style Name:Lewis Shirt Floral Recycled Polyester,Brand:Crossline';
 
-        // Ensure we don't scan duplicates in simulation
-        const existsInProject = existingItems?.some(
-          (item) => item.styleMaterialNumber.toLowerCase() === itemCode.toLowerCase()
-        );
-        const existsInScanned = scannedItems.some(
-          (item) => item.toLowerCase() === itemCode.toLowerCase()
-        );
+        playBeep();
+        setLastScannedItem(itemCode);
+        setTimeout(() => {
+          setLastScannedItem(null);
+        }, 2000);
 
-        if (!existsInProject && !existsInScanned) {
-          playBeep();
-          setScannedItems(prev => [...prev, itemCode]);
-          setLastScannedItem(itemCode);
-
-          setTimeout(() => {
-            setLastScannedItem(null);
-          }, 2000);
-
-          await manualQrInput(itemCode);
-        }
+        setIsScanning(false);
+        await manualQrInput(itemCode);
       }, 3000);
     }
 
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [isScanning, isOpen, existingItems, scannedItems, manualQrInput]);
+  }, [isScanning, isOpen, hasCameraPermission, manualQrInput]);
 
   return (
     <Modal 
@@ -304,18 +375,33 @@ export default function AddStylesModal({
             )}
           </div>
 
-          <Button
-            type="button"
-            variant={isScanning ? 'danger' : 'primary'}
-            className={styles.startScanButton}
-            onClick={() => setIsScanning(prev => !prev)}
-            icon={isScanning ? <AlertCircle size={16} /> : <Camera size={16} />}
-          >
-            {isScanning ? 'Stop Scanning' : 'Start Scanning'}
-          </Button>
+          <div className={styles.scannerButtons}>
+            <Button
+              type="button"
+              variant={isScanning ? 'danger' : 'primary'}
+              className={styles.startScanButton}
+              onClick={() => setIsScanning(prev => !prev)}
+              icon={isScanning ? <AlertCircle size={16} /> : <Camera size={16} />}
+            >
+              {isScanning ? 'Stop Scanning' : 'Start Scanning'}
+            </Button>
+            
+            <div className={styles.fileUploadWrapper}>
+              <label htmlFor="qrImageUpload" className={styles.fileUploadLabel}>
+                <Plus size={16} /> Upload QR Image
+              </label>
+              <input
+                type="file"
+                id="qrImageUpload"
+                accept="image/*"
+                onChange={handleQrImageUpload}
+                className={styles.fileInputHidden}
+              />
+            </div>
+          </div>
 
           <div className={styles.tipBox}>
-            <strong>How to use:</strong> Click "Start Scanning" and point your camera at a QR code. The item will be automatically added to your project once scanned.
+            <strong>How to use:</strong> Click "Start Scanning" to use your camera, or click "Upload QR Image" to upload a QR code image. The item will be automatically added to your project once parsed and validated.
           </div>
         </div>
 
@@ -351,7 +437,7 @@ export default function AddStylesModal({
           <Button 
             type="submit" 
             className={styles.saveBtn} 
-            disabled={isAddingStyle || (scannedItems.length === 0 && !manualInput.trim())}
+            disabled={isAddingStyle || !manualInput.trim()}
             icon={<Plus size={14} />}
             variant="primary"
           >
