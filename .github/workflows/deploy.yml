@@ -34,4 +34,4 @@ jobs:
         with:
           app-name: 'buyersectionapp'
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ./dist
+          package: "./dist"
