@@ -393,19 +393,19 @@ export default function AddStylesModal({
           <div className={styles.scannerViewport}>
             {isScanning ? (
               <>
-                {hasCameraPermission ? (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={styles.videoElement}
-                  />
-                ) : (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={styles.videoElement}
+                  style={{ display: hasCameraPermission ? 'block' : 'none' }}
+                />
+                {!hasCameraPermission && (
                   <div className={styles.scannerPlaceholder}>
                     <QrCode size={36} className={`animate-pulse ${styles.pulseQrIcon}`} />
                     <span className={styles.pulseQrText}>
-                      {scanError || 'Simulating scanner...'}
+                      {scanError || 'Initializing camera...'}
                     </span>
                   </div>
                 )}

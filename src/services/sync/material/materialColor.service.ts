@@ -61,7 +61,6 @@ export function buildSaveMaterialColorwayPayload(params: {
   const dtoList = params.matchedColorways.map(({ plmColorway, projItem }) => {
     const materialColorwayId = plmColorway.MaterialColorwayId ?? plmColorway.MaterialColorwayID ?? plmColorway.id ?? plmColorway.Id;
 
-    // Build the fields. Include all existing ones, and override FreeFieldFive (comments) and Date3 (sample due date).
     const fieldValues = [
       {
         fieldName: "FreeFieldFive",
@@ -71,13 +70,13 @@ export function buildSaveMaterialColorwayPayload(params: {
         fieldName: "MaterialId",
         value: Number(params.materialId),
       },
-      // {
-      //   fieldName: "MaterialColorwayStatus",
-      //   value: Number(projItem.colorStatusId ?? plmColorway.MaterialColorwayStatus ?? 1),
-      // },
+      {
+        fieldName: "MaterialColorwayId",
+        value: Number(materialColorwayId),
+      },
       {
         fieldName: "RowVersionText",
-        value: plmColorway.RowVersionText ?? plmColorway.rowVersionText,
+        value: plmColorway.RowVersionText ?? plmColorway.rowVersionText ?? plmColorway.RowVersion ?? plmColorway.rowVersion ?? "",
       },
       {
         fieldName: "Name",
@@ -86,11 +85,7 @@ export function buildSaveMaterialColorwayPayload(params: {
       {
         fieldName: "Code",
         value: plmColorway.Code || "",
-      },
-      // {
-      //   fieldName: "Date3",
-      //   value: formatDateToMMDDYYYY(projItem.sampleDue),
-      // }
+      }
     ];
     return {
       Id: Number(materialColorwayId),
@@ -99,8 +94,8 @@ export function buildSaveMaterialColorwayPayload(params: {
     };
   });
 
-  const finalPayload: SaveMaterialColorwayRequestPayload = {
-    materialID: String(params.materialId),
+  const finalPayload: SaveMaterialColorwayRequestPayload & Record<string, any> = {
+    materialID: Number(params.materialId) as any,
     MaterialColorwayDto: dtoList,
     createId: userId,
     modifyId: userId,
@@ -108,7 +103,10 @@ export function buildSaveMaterialColorwayPayload(params: {
     moduleId: Number(params.materialId),
     moduleCode: params.materialCode,
     moduleName: params.materialName,
+    notificationMessageKey: "UPDATED_MATERIAL_COLORWAYS",
+    pageType: "details",
     forDelColorwaysIds: [],
+    parentMaterialId: null,
     Schema: schema,
   };
 
