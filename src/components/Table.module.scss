@@ -113,18 +113,14 @@
 
 .tableWrapper {
   width: 100%;
-  overflow: visible;
+  overflow-x: auto;
   border-radius: 0.25rem;
   border: 0.0625rem solid var(--table-cell-border);
   background-color: var(--color-bg-surface, #ffffff);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
   transition: all 0.2s ease;
 
- 
-  @media (max-width: 768px) {
-    overflow-x: auto;
-    min-height: 280px;
-  }
+  min-height: 280px;
 }
 
 .table {

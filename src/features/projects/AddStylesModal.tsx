@@ -71,7 +71,11 @@ export default function AddStylesModal({
       if (isScanning && isOpen) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }
+            video: { 
+              facingMode: 'environment',
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            }
           });
           activeStream = stream;
           streamRef.current = stream;
@@ -97,6 +101,9 @@ export default function AddStylesModal({
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
     };
   }, [isScanning, isOpen]);
@@ -328,7 +335,12 @@ export default function AddStylesModal({
         }
       }
 
-      animationFrameId = requestAnimationFrame(scanFrame);
+      // Add a slight delay to avoid blocking the main thread and improve UI responsiveness
+      setTimeout(() => {
+        if (isScanning && isOpen && hasCameraPermission) {
+          animationFrameId = requestAnimationFrame(scanFrame);
+        }
+      }, 150);
     };
 
     if (isScanning && isOpen && hasCameraPermission) {

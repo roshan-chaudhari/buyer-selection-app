@@ -550,7 +550,7 @@ export function useProjectSync({
           const createPayload = {
             project: {
               projectId: "0",
-              code: project.ProjectName,
+              // code: project.ProjectName,
               name: project.ProjectName,
               description: project.Description ?? "",
               projectDetail: []

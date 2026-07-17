@@ -174,7 +174,7 @@
   letter-spacing: 0.025em;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .userDetails {
     display: none;
   }
@@ -286,12 +286,16 @@
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
+  flex-shrink: 0;
+  width: 100%;
 }
 
 .infoField {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  flex-shrink: 0;
+  width: 100%;
 }
 
 .infoLabel {
