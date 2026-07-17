@@ -15,13 +15,24 @@ function buildTokenUrl(pu: string, ot: string = 'token.oauth2'): string {
 /**
  * Helper to send a POST request through the local Connect CORS proxy (/cors-proxy) to fetch the OAuth token.
  */
-async function postTokenRequest(tokenUrl: string, params: URLSearchParams): Promise<TokenResponse> {
-  const response = await axios.post<TokenResponse>('/cors-proxy', params, {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "x-target-url": tokenUrl
+const API_BASE =
+  "https://buyersectionapp-api-hxg5eqfrb6ezfzab.centralindia-01.azurewebsites.net";
+
+async function postTokenRequest(
+  tokenUrl: string,
+  params: URLSearchParams
+): Promise<TokenResponse> {
+  const response = await axios.post<TokenResponse>(
+    `${API_BASE}/cors-proxy`,
+    params.toString(),
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "x-target-url": tokenUrl,
+      },
     }
-  });
+  );
+
   return response.data;
 }
 
