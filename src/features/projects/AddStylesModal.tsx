@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import jsQR from 'jsqr';
-import { Plus, Camera, QrCode, AlertCircle } from 'lucide-react';
-import Modal from '../../components/Modal';
-import Button from '../../components/Button';
-import Input from '../../components/Input';
-import { projectService, type ProjectItem } from '../../services/projectService';
-import type { TableType } from '../../types/table';
-import { odata2style, odata2material } from '../../services/api';
-import { extractODataList } from '../../utils/odata';
-import styles from './AddStylesModal.module.scss';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import jsQR from "jsqr";
+import { Plus, Camera, QrCode, AlertCircle } from "lucide-react";
+import Modal from "../../components/Modal";
+import Button from "../../components/Button";
+import Input from "../../components/Input";
+import {
+  projectService,
+  type ProjectItem,
+} from "../../services/projectService";
+import type { TableType } from "../../types/table";
+import { odata2style, odata2material } from "../../services/api";
+import { extractODataList } from "../../utils/odata";
+import styles from "./AddStylesModal.module.scss";
 
 interface AddStylesModalProps {
   isOpen: boolean;
@@ -29,26 +32,40 @@ export default function AddStylesModal({
 }: AddStylesModalProps) {
   const [isAddingStyle, setIsAddingStyle] = useState(false);
 
-
   // Scanner & Manual entry inside Add Styles Modal
-  const [manualInput, setManualInput] = useState('');
+  const [manualInput, setManualInput] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
-  const [scanError, setScanError] = useState('');
+  const [scanError, setScanError] = useState("");
   const [lastScannedItem, setLastScannedItem] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Stable refs — never recreated across renders
+  const audioContextRef = useRef<AudioContext | null>(null);   // ✅ 12: Reuse AudioContext
+  const openingCameraRef = useRef(false);                      // ✅ 6: Prevent duplicate getUserMedia
+  const lastQrRef = useRef("");                                 // ✅ 2: Skip same QR code
+  const overlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // ✅ 3: Cleanup overlay timeout
+
+  // ✅ 12: Reuse a single AudioContext for all beeps (avoids browser limit on AudioContext count)
   const playBeep = () => {
     try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
       if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
+
+      if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+        audioContextRef.current = new AudioContextClass();
+      }
+      const ctx = audioContextRef.current;
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.type = 'sine';
+      osc.type = "sine";
       osc.frequency.setValueAtTime(880, ctx.currentTime);
       gain.gain.setValueAtTime(0.08, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
@@ -59,7 +76,7 @@ export default function AddStylesModal({
       osc.start();
       osc.stop(ctx.currentTime + 0.15);
     } catch (e) {
-      console.warn('AudioContext beep failed:', e);
+      console.warn("AudioContext beep failed:", e);
     }
   };
 
@@ -68,36 +85,49 @@ export default function AddStylesModal({
     let activeStream: MediaStream | null = null;
 
     const startCamera = async () => {
-      if (isScanning && isOpen) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-              facingMode: 'environment',
-              width: { ideal: 640 },
-              height: { ideal: 480 }
-            }
-          });
-          activeStream = stream;
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            // Mobile browsers (iOS Safari, Android Chrome) require an explicit .play() call.
-            // Setting srcObject alone does NOT auto-play on mobile even with the autoPlay attribute.
-            // Without this, video.readyState never reaches HAVE_ENOUGH_DATA (4), so the
-            // scan loop never captures a frame and the QR scanner appears stuck/inactive.
-            try {
-              await videoRef.current.play();
-            } catch (playErr) {
-              console.warn('[AddStylesModal] video.play() failed (may be normal if already playing):', playErr);
-            }
+      if (!isScanning || !isOpen) return;
+
+      // ✅ 6: Prevent duplicate getUserMedia on rapid Start → Stop → Start
+      if (openingCameraRef.current) return;
+      openingCameraRef.current = true;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            // ✅ 7: Use ideal constraint — works on Android Chrome, Samsung Internet, Safari
+            facingMode: { ideal: "environment" },
+            // ✅ 8: Higher resolution gives jsQR clearer QR edges → faster detection
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+        activeStream = stream;
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          // Mobile browsers (iOS Safari, Android Chrome) require an explicit .play() call.
+          // Setting srcObject alone does NOT auto-play on mobile even with the autoPlay attribute.
+          // Without this, video.readyState never reaches HAVE_ENOUGH_DATA (4), so the
+          // scan loop never captures a frame and the QR scanner appears stuck/inactive.
+          try {
+            await videoRef.current.play();
+          } catch (playErr) {
+            console.warn(
+              "[AddStylesModal] video.play() failed (may be normal if already playing):",
+              playErr,
+            );
           }
-          setHasCameraPermission(true);
-          setScanError('');
-        } catch (err) {
-          console.warn('Camera access denied or unavailable:', err);
-          setHasCameraPermission(false);
-          setScanError('Camera not available or access denied. Showing scanner simulation.');
         }
+        setHasCameraPermission(true);
+        setScanError("");
+      } catch (err) {
+        console.warn("Camera access denied or unavailable:", err);
+        setHasCameraPermission(false);
+        setScanError(
+          "Camera not available or access denied. Showing scanner simulation.",
+        );
+      } finally {
+        openingCameraRef.current = false;
       }
     };
 
@@ -105,25 +135,32 @@ export default function AddStylesModal({
 
     return () => {
       if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
+        activeStream.getTracks().forEach((track) => track.stop());
       }
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
       }
       if (videoRef.current) {
+        // ✅ 4: Pause before clearing srcObject — required for Safari to release camera properly
+        videoRef.current.pause();
         videoRef.current.srcObject = null;
+      }
+      // ✅ 3: Clear overlay timeout on cleanup to prevent state update after unmount
+      if (overlayTimeoutRef.current) {
+        clearTimeout(overlayTimeoutRef.current);
+        overlayTimeoutRef.current = null;
       }
     };
   }, [isScanning, isOpen]);
 
-
-
-  const handleManualInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+  const handleManualInputKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      const form = e.currentTarget.closest('form');
+      const form = e.currentTarget.closest("form");
       if (form) {
         form.requestSubmit();
       }
@@ -134,127 +171,186 @@ export default function AddStylesModal({
    * Fetches the style/material details from the OData Service and validates its existence.
    * Throws detailed errors if validation fails or duplicates are found.
    */
-  const fetchAndValidateStyle = useCallback(async (code: string, skipDuplicateCheck = false): Promise<{ styleObj: any; itemType: 'Style' | 'Material' }> => {
-    if (!skipDuplicateCheck) {
-      // Check for duplicate in current project items
-      const isDuplicateInProject = existingItems?.some(
-        (item) => item.styleMaterialNumber.toLowerCase() === code.toLowerCase()
-      );
-      if (isDuplicateInProject) {
-        throw new Error(`Item "${code}" already exists in this project`);
+  const fetchAndValidateStyle = useCallback(
+    async (
+      code: string,
+      skipDuplicateCheck = false,
+    ): Promise<{ styleObj: any; itemType: "Style" | "Material" }> => {
+      if (!skipDuplicateCheck) {
+        // Check for duplicate in current project items
+        const isDuplicateInProject = existingItems?.some(
+          (item) =>
+            item.styleMaterialNumber.toLowerCase() === code.toLowerCase(),
+        );
+        if (isDuplicateInProject) {
+          throw new Error(`Item "${code}" already exists in this project`);
+        }
       }
-    }
 
-    // Determine parameter: numeric-only -> ID; alphanumeric -> Code
-    const isNum = code.length > 0 && /^\d+$/.test(code);
+      // Determine parameter: numeric-only -> ID; alphanumeric -> Code
+      const isNum = code.length > 0 && /^\d+$/.test(code);
 
-    // 1. Try style lookup
-    try {
-      const styleQueryParams = isNum 
-        ? { StyleId: Number(code) } 
-        : { search: code };
+      // 1. Try style lookup
+      try {
+        const styleQueryParams = isNum
+          ? { StyleId: Number(code) }
+          : { search: code };
 
-      const response = await odata2style.getStyleData(styleQueryParams);
-      const styleList = extractODataList<any>(response);
+        const response = await odata2style.getStyleData(styleQueryParams);
+        const styleList = extractODataList<any>(response);
 
-      if (styleList.length > 0) {
-        return {
-          styleObj: styleList[0],
-          itemType: 'Style' as const
-        };
+        if (styleList.length > 0) {
+          return {
+            styleObj: styleList[0],
+            itemType: "Style" as const,
+          };
+        }
+      } catch (err) {
+        console.log(
+          "[AddStylesModal] Style lookup failed, checking material...",
+          err,
+        );
       }
-    } catch (err) {
-      console.log('[AddStylesModal] Style lookup failed, checking material...', err);
-    }
 
-    // 2. Try material lookup
-    try {
-      const materialQueryParams = isNum 
-        ? { MaterialId: Number(code) } 
-        : { search: code };
+      // 2. Try material lookup
+      try {
+        const materialQueryParams = isNum
+          ? { MaterialId: Number(code) }
+          : { search: code };
 
-      console.log('[AddStylesModal] Initiating Material lookup with query params:', JSON.stringify(materialQueryParams, null, 2));
-      const response = await odata2material.getMaterialData(materialQueryParams);
-      console.log('[AddStylesModal] Material lookup response received:', response ? 'Yes (length: ' + JSON.stringify(response).length + ')' : 'No');
-      const materialList = extractODataList<any>(response);
-      console.log('[AddStylesModal] Extracted materialList count:', materialList.length);
+        console.log(
+          "[AddStylesModal] Initiating Material lookup with query params:",
+          JSON.stringify(materialQueryParams, null, 2),
+        );
+        const response =
+          await odata2material.getMaterialData(materialQueryParams);
+        console.log(
+          "[AddStylesModal] Material lookup response received:",
+          response
+            ? "Yes (length: " + JSON.stringify(response).length + ")"
+            : "No",
+        );
+        const materialList = extractODataList<any>(response);
+        console.log(
+          "[AddStylesModal] Extracted materialList count:",
+          materialList.length,
+        );
 
-      if (materialList.length > 0) {
-        console.log('[AddStylesModal] Found Material in PLM:', JSON.stringify(materialList[0], null, 2));
-        return {
-          styleObj: materialList[0],
-          itemType: 'Material' as const
-        };
-      } else {
-        console.log('[AddStylesModal] Material list is empty for code:', code);
+        if (materialList.length > 0) {
+          console.log(
+            "[AddStylesModal] Found Material in PLM:",
+            JSON.stringify(materialList[0], null, 2),
+          );
+          return {
+            styleObj: materialList[0],
+            itemType: "Material" as const,
+          };
+        } else {
+          console.log(
+            "[AddStylesModal] Material list is empty for code:",
+            code,
+          );
+        }
+      } catch (err) {
+        console.error(
+          "[AddStylesModal] Material lookup failed with error:",
+          err,
+        );
       }
-    } catch (err) {
-      console.error('[AddStylesModal] Material lookup failed with error:', err);
-    }
 
-    throw new Error('Item not found as Style or Material in PLM.');
-  }, [existingItems]);
+      throw new Error("Item not found as Style or Material in PLM.");
+    },
+    [existingItems],
+  );
 
   /** Returns today's date as a YYYY-MM-DD string. */
-  const getTodayDateString = () => new Date().toISOString().split('T')[0];
+  const getTodayDateString = () => new Date().toISOString().split("T")[0];
 
   /**
    * Maps Infor OData Style/Material metadata to the database schema structure.
    */
-  const mapODataStyleToItemPayload = useCallback((
-    code: string, 
-    styleObj: any,
-    itemType: 'Style' | 'Material'
-  ): Omit<ProjectItem, 'id' | 'projectId'> => {
-    const styleNameStr = (styleObj.Name as string) || (styleObj.MaterialName as string) || (styleObj.Description as string) || code.replace(/^QR-/, '');
-    const styleId = styleObj.StyleId || styleObj.MaterialId || styleObj.Id || 0;
-    const styleMaterialNum = itemType === 'Style' ? (styleObj.StyleCode || code) : (styleObj.MaterialCode || code);
+  const mapODataStyleToItemPayload = useCallback(
+    (
+      code: string,
+      styleObj: any,
+      itemType: "Style" | "Material",
+    ): Omit<ProjectItem, "id" | "projectId"> => {
+      const styleNameStr =
+        (styleObj.Name as string) ||
+        (styleObj.MaterialName as string) ||
+        (styleObj.Description as string) ||
+        code.replace(/^QR-/, "");
+      const styleId =
+        styleObj.StyleId || styleObj.MaterialId || styleObj.Id || 0;
+      const styleMaterialNum =
+        itemType === "Style"
+          ? styleObj.StyleCode || code
+          : styleObj.MaterialCode || code;
 
-    return {
-      styleId: Number(styleId),
-      colorId: 0,
-      styleMaterialNumber: styleMaterialNum,
-      styleMaterialName: styleNameStr,
-      itemType: itemType,
-      colorway: '',
-      colorwayStatus: 'Pending',
-      selectionCondition: 'As-Is',
-      sampleDue: getTodayDateString(),
-      buyerComments: '',
-      internalComments: '',
-    };
-  }, []);
+      return {
+        styleId: Number(styleId),
+        colorId: 0,
+        styleMaterialNumber: styleMaterialNum,
+        styleMaterialName: styleNameStr,
+        itemType: itemType,
+        colorway: "",
+        colorwayStatus: "Pending",
+        selectionCondition: "As-Is",
+        sampleDue: getTodayDateString(),
+        buyerComments: "",
+        internalComments: "",
+      };
+    },
+    [],
+  );
 
   /**
    * Validates, structures, and adds a Style Number to the project.
    */
-  const manualQrInput = useCallback(async (code: string) => {
-    if (!project?.id || !code.trim()) return;
+  const manualQrInput = useCallback(
+    async (code: string) => {
+      if (!project?.id || !code.trim()) return;
 
-    let styleNumber = code.trim();
-    // Parse the QR code response format (e.g. Style Number:WS260041,Style Name:DMAGIC,Brand:Crossline)
-    const match = styleNumber.match(/Style\s+Number\s*:\s*([^,]+)/i);
-    if (match) {
-      styleNumber = match[1].trim();
-    }
+      let styleNumber = code.trim();
+      // Parse the QR code response format (e.g. Style Number:WS260041,Style Name:DMAGIC,Brand:Crossline)
+      const match = styleNumber.match(/Style\s+Number\s*:\s*([^,]+)/i);
+      if (match) {
+        styleNumber = match[1].trim();
+      }
 
-    setIsAddingStyle(true);
-    try {
-      const { styleObj, itemType } = await fetchAndValidateStyle(styleNumber);
-      const payload = mapODataStyleToItemPayload(styleNumber, styleObj, itemType);
-      await projectService.addItemToProject(project.id!, payload);
+      setIsAddingStyle(true);
+      try {
+        const { styleObj, itemType } = await fetchAndValidateStyle(styleNumber);
+        const payload = mapODataStyleToItemPayload(
+          styleNumber,
+          styleObj,
+          itemType,
+        );
+        await projectService.addItemToProject(project.id!, payload);
 
-      const allProjects = await projectService.getAllProjects();
-      const updated = allProjects.find((p) => p.id === project.id);
-      if (updated) onAddStyles(updated);
-      onClose();
-    } catch (err) {
-      console.error('[AddStylesModal] Failed to add style via manualQrInput:', err);
-      onError?.(err instanceof Error ? err.message : 'Style not found.');
-    } finally {
-      setIsAddingStyle(false);
-    }
-  }, [project, fetchAndValidateStyle, mapODataStyleToItemPayload, onAddStyles, onClose, onError]);
+        const allProjects = await projectService.getAllProjects();
+        const updated = allProjects.find((p) => p.id === project.id);
+        if (updated) onAddStyles(updated);
+        onClose();
+      } catch (err) {
+        console.error(
+          "[AddStylesModal] Failed to add style via manualQrInput:",
+          err,
+        );
+        onError?.(err instanceof Error ? err.message : "Style not found.");
+      } finally {
+        setIsAddingStyle(false);
+      }
+    },
+    [
+      project,
+      fetchAndValidateStyle,
+      mapODataStyleToItemPayload,
+      onAddStyles,
+      onClose,
+      onError,
+    ],
+  );
 
   const handleAddStyle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +361,9 @@ export default function AddStylesModal({
     }
   };
 
-  const handleQrImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -273,14 +371,18 @@ export default function AddStylesModal({
     reader.onload = (event) => {
       const img = new Image();
       img.onload = async () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = img.width;
         canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(img, 0, 0);
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+          const qrCode = jsQR(
+            imageData.data,
+            imageData.width,
+            imageData.height,
+          );
           if (qrCode && qrCode.data) {
             playBeep();
             const rawCode = qrCode.data.trim();
@@ -290,8 +392,10 @@ export default function AddStylesModal({
             }, 3000);
             await manualQrInput(rawCode);
           } else {
-            console.error('[AddStylesModal] No QR code found in the uploaded image.');
-            onError?.('No QR code found in the uploaded image.');
+            console.error(
+              "[AddStylesModal] No QR code found in the uploaded image.",
+            );
+            onError?.("No QR code found in the uploaded image.");
           }
         }
       };
@@ -300,104 +404,115 @@ export default function AddStylesModal({
     reader.readAsDataURL(file);
   };
 
-  // Continuous scanning loop using requestAnimationFrame when camera is active
-  useEffect(() => {
-    let animationFrameId: number;
-    let canvas: HTMLCanvasElement | null = null;
-    let context: CanvasRenderingContext2D | null = null;
 
-    const scanFrame = async () => {
-      if (!isScanning || !isOpen) return;
+  useEffect(() => {
+
+    if (!isScanning || !isOpen || !hasCameraPermission) return;
+
+    // ✅ 2: Reset last-seen QR so the same code can be re-scanned in a new session
+    lastQrRef.current = "";
+
+    let timer: ReturnType<typeof setTimeout>;
+    let isCancelled = false;
+    let isProcessing = false;
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    const scan = async () => {
+      // ✅ 9: Stop immediately if modal closed or scanning stopped
+      if (isCancelled || isProcessing) return;
 
       const video = videoRef.current;
-      // Use readyState >= 2 (HAVE_CURRENT_DATA) instead of === HAVE_ENOUGH_DATA (4).
-      // Mobile browsers (iOS/Android) often stay at readyState 3 (HAVE_FUTURE_DATA)
-      // and never reach 4, causing the scan loop to never capture a frame.
-      if (video && video.readyState >= 2) {
-        if (!canvas) {
-          canvas = document.createElement('canvas');
-        }
+
+      if (
+        video &&
+        video.readyState >= 2 &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        context
+      ) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        if (!context) {
-          context = canvas.getContext('2d');
-        }
 
-        if (context) {
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert',
-          });
+        context.drawImage(video, 0, 0);
 
-          if (qrCode && qrCode.data) {
-            const rawCode = qrCode.data.trim();
-            console.log('[AddStylesModal] 📷 Decoded QR code from camera stream:', rawCode);
+        const imageData = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
 
-            playBeep();
-            setLastScannedItem(rawCode);
-            setTimeout(() => {
-              setLastScannedItem(null);
-            }, 3000);
+        const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
-            setIsScanning(false);
-            await manualQrInput(rawCode);
+        if (qrCode?.data) {
+          const rawCode = qrCode.data.trim();
+
+          // ✅ 2: Skip if same QR code is still in frame (camera hasn't moved away)
+          if (rawCode === lastQrRef.current) {
+            timer = setTimeout(scan, 200);
             return;
           }
+          lastQrRef.current = rawCode;
+
+          isProcessing = true;
+
+          // ✅ 10: Structured debug log for production debugging
+          console.debug("[QR Scanner]", {
+            code: rawCode,
+            width: canvas.width,
+            height: canvas.height,
+            timestamp: new Date().toISOString(),
+          });
+
+          playBeep();
+
+          // ✅ 3: Use ref so the timeout is properly cancelled if the modal closes
+          if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+          setLastScannedItem(rawCode);
+          overlayTimeoutRef.current = setTimeout(() => {
+            setLastScannedItem(null);
+            overlayTimeoutRef.current = null;
+          }, 3000);
+
+          setIsScanning(false);
+
+          try {
+            await manualQrInput(rawCode);
+          } catch (err) {
+            // ✅ 11: Resume scanner on backend failure instead of leaving user stuck
+            console.error("[QR Scanner] Backend processing failed:", err);
+            setScanError("Unable to process QR. Please try again.");
+            setIsScanning(true);
+          } finally {
+            isProcessing = false;
+          }
+
+          return;
         }
       }
 
-      // Add a slight delay to avoid blocking the main thread and improve UI responsiveness
-      setTimeout(() => {
-        if (isScanning && isOpen && hasCameraPermission) {
-          animationFrameId = requestAnimationFrame(scanFrame);
-        }
-      }, 150);
+      if (!isCancelled && isScanning) {
+        timer = setTimeout(scan, 200);
+      }
     };
 
-    if (isScanning && isOpen && hasCameraPermission) {
-      animationFrameId = requestAnimationFrame(scanFrame);
-    }
+    scan();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [isScanning, isOpen, hasCameraPermission, manualQrInput]);
-
-  // Simulate barcode scanning intervals when scanner is active but camera is not available
-  useEffect(() => {
-    let timerId: ReturnType<typeof setInterval> | null = null;
-
-    if (isScanning && isOpen && !hasCameraPermission) {
-      timerId = setInterval(async () => {
-        // Simulating a valid QR response string for A10001 which is present in PLM mock database
-        const itemCode = 'Style Number:A10001,Style Name:Lewis Shirt Floral Recycled Polyester,Brand:Crossline';
-
-        playBeep();
-        setLastScannedItem(itemCode);
-        setTimeout(() => {
-          setLastScannedItem(null);
-        }, 2000);
-
-        setIsScanning(false);
-        await manualQrInput(itemCode);
-      }, 3000);
-    }
-
-    return () => {
-      if (timerId) clearInterval(timerId);
+      isCancelled = true;
+      clearTimeout(timer);
     };
   }, [isScanning, isOpen, hasCameraPermission, manualQrInput]);
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title="Add Styles / Items"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} title="Add Styles / Items">
       <form onSubmit={handleAddStyle} className={styles.editForm}>
         {/* Scan a QR Code Card */}
-        <div className={`${styles.card} ${lastScannedItem && lastScannedItem.startsWith('QR-') ? styles.successHighlight : ''}`}>
+        <div
+          className={`${styles.card} ${lastScannedItem && lastScannedItem.startsWith("QR-") ? styles.successHighlight : ""}`}
+        >
           <div className={styles.cardHeader}>
             <h4 className={styles.cardTitle}>Scan a QR Code</h4>
           </div>
@@ -411,7 +526,7 @@ export default function AddStylesModal({
                   playsInline
                   muted
                   className={styles.videoElement}
-                  style={{ display: hasCameraPermission ? 'block' : 'none' }}
+                  style={{ display: hasCameraPermission ? "block" : "none" }}
                   onLoadedMetadata={() => {
                     // iOS Safari fallback: call play() when stream metadata is ready.
                     // This handles cases where the explicit play() in startCamera fires
@@ -421,9 +536,12 @@ export default function AddStylesModal({
                 />
                 {!hasCameraPermission && (
                   <div className={styles.scannerPlaceholder}>
-                    <QrCode size={36} className={`animate-pulse ${styles.pulseQrIcon}`} />
+                    <QrCode
+                      size={36}
+                      className={`animate-pulse ${styles.pulseQrIcon}`}
+                    />
                     <span className={styles.pulseQrText}>
-                      {scanError || 'Initializing camera...'}
+                      {scanError || "Initializing camera..."}
                     </span>
                   </div>
                 )}
@@ -438,7 +556,9 @@ export default function AddStylesModal({
             ) : (
               <div className={styles.scannerPlaceholder}>
                 <Camera size={36} className={styles.inactiveCameraIcon} />
-                <span className={styles.inactiveCameraText}>Camera preview is inactive</span>
+                <span className={styles.inactiveCameraText}>
+                  Camera preview is inactive
+                </span>
               </div>
             )}
           </div>
@@ -446,14 +566,16 @@ export default function AddStylesModal({
           <div className={styles.scannerButtons}>
             <Button
               type="button"
-              variant={isScanning ? 'danger' : 'primary'}
+              variant={isScanning ? "danger" : "primary"}
               className={styles.startScanButton}
-              onClick={() => setIsScanning(prev => !prev)}
-              icon={isScanning ? <AlertCircle size={16} /> : <Camera size={16} />}
+              onClick={() => setIsScanning((prev) => !prev)}
+              icon={
+                isScanning ? <AlertCircle size={16} /> : <Camera size={16} />
+              }
             >
-              {isScanning ? 'Stop Scanning' : 'Start Scanning'}
+              {isScanning ? "Stop Scanning" : "Start Scanning"}
             </Button>
-            
+
             <div className={styles.fileUploadWrapper}>
               <label htmlFor="qrImageUpload" className={styles.fileUploadLabel}>
                 <Plus size={16} /> Upload QR Image
@@ -469,12 +591,17 @@ export default function AddStylesModal({
           </div>
 
           <div className={styles.tipBox}>
-            <strong>How to use:</strong> Click "Start Scanning" to use your camera, or click "Upload QR Image" to upload a QR code image. The item will be automatically added to your project once parsed and validated.
+            <strong>How to use:</strong> Click "Start Scanning" to use your
+            camera, or click "Upload QR Image" to upload a QR code image. The
+            item will be automatically added to your project once parsed and
+            validated.
           </div>
         </div>
 
         {/* Manual Entry Card */}
-        <div className={`${styles.card} ${lastScannedItem && !lastScannedItem.startsWith('QR-') ? styles.successHighlight : ''}`}>
+        <div
+          className={`${styles.card} ${lastScannedItem && !lastScannedItem.startsWith("QR-") ? styles.successHighlight : ""}`}
+        >
           <h4 className={styles.cardTitle}>Manual Entry</h4>
 
           <Input
@@ -489,27 +616,28 @@ export default function AddStylesModal({
           />
 
           <div className={styles.manualTipBox}>
-            Use this option if you don't have camera access or want to manually add items.
+            Use this option if you don't have camera access or want to manually
+            add items.
           </div>
         </div>
 
         <div className={styles.formActions}>
-          <Button 
-            type="button" 
+          <Button
+            type="button"
             onClick={onClose}
             disabled={isAddingStyle}
             variant="outline"
           >
             Cancel
           </Button>
-          <Button 
-            type="submit" 
-            className={styles.saveBtn} 
+          <Button
+            type="submit"
+            className={styles.saveBtn}
             disabled={isAddingStyle || !manualInput.trim()}
             icon={<Plus size={14} />}
             variant="primary"
           >
-            {isAddingStyle ? 'Adding...' : `Add to Project`}
+            {isAddingStyle ? "Adding..." : `Add to Project`}
           </Button>
         </div>
       </form>
