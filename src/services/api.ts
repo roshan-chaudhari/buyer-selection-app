@@ -667,7 +667,8 @@ export async function fetchStyleImage(
     // which is faster, memory-efficient, and avoids CORS canvas issues.
     const directUrl = imgAttachment.Image || imgAttachment.ImageCustom || imgAttachment.ImageThumb;
     if (directUrl) {
-      return `/api/projects/proxy-image?url=${encodeURIComponent(directUrl)}`;
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      return `${baseUrl}/api/projects/proxy-image?url=${encodeURIComponent(directUrl)}`;
     }
 
     // Fallback: parse raw base64 Value field
