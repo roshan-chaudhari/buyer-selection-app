@@ -819,7 +819,13 @@
   position: relative;
 
   &:not(:focus) {
-    &::-webkit-datetime-edit {
+    color: transparent !important;
+    text-shadow: 0 0 0 transparent !important;
+
+    &::-webkit-datetime-edit,
+    &::-webkit-datetime-edit-text,
+    &::-webkit-datetime-edit-fields-wrapper,
+    &::-webkit-date-and-time-value {
       color: transparent !important;
     }
 
@@ -829,7 +835,7 @@
       left: 0;
       top: 50%;
       transform: translateY(-50%);
-      color: var(--color-text-main, #1f2937);
+      color: var(--color-text-main, #1f2937) !important;
       font-family: inherit;
       font-size: 0.8125rem;
       font-weight: 600;
