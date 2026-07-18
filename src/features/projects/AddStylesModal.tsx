@@ -83,6 +83,7 @@ export default function AddStylesModal({
   // Manage WebRTC camera stream lifecycle
   useEffect(() => {
     let activeStream: MediaStream | null = null;
+    let isCancelled = false;
 
     const startCamera = async () => {
       if (!isScanning || !isOpen) return;
@@ -101,6 +102,14 @@ export default function AddStylesModal({
             height: { ideal: 720 },
           },
         });
+
+        // ✅ 13: Race condition fix - If component unmounted or stopped scanning while waiting for camera
+        if (isCancelled) {
+          console.warn("[AddStylesModal] Camera opened but scanner was stopped. Cleaning up immediately.");
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
         activeStream = stream;
         streamRef.current = stream;
         if (videoRef.current) {
@@ -134,6 +143,7 @@ export default function AddStylesModal({
     void startCamera();
 
     return () => {
+      isCancelled = true;
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
@@ -405,6 +415,12 @@ export default function AddStylesModal({
   };
 
 
+  // Stable ref for manualQrInput to prevent the scan loop from tearing down/restarting on every render
+  const manualQrInputRef = useRef(manualQrInput);
+  useEffect(() => {
+    manualQrInputRef.current = manualQrInput;
+  }, [manualQrInput]);
+
   useEffect(() => {
 
     if (!isScanning || !isOpen || !hasCameraPermission) return;
@@ -479,7 +495,7 @@ export default function AddStylesModal({
           setIsScanning(false);
 
           try {
-            await manualQrInput(rawCode);
+            await manualQrInputRef.current(rawCode);
           } catch (err) {
             // ✅ 11: Resume scanner on backend failure instead of leaving user stuck
             console.error("[QR Scanner] Backend processing failed:", err);
@@ -504,7 +520,7 @@ export default function AddStylesModal({
       isCancelled = true;
       clearTimeout(timer);
     };
-  }, [isScanning, isOpen, hasCameraPermission, manualQrInput]);
+  }, [isScanning, isOpen, hasCameraPermission]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add Styles / Items">
