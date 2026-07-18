@@ -8,6 +8,7 @@ import {
   getPlmJobTaskItems,
   fetchPlmColorwayDetails,
   setSyncInProgress,
+  fetchCurrentUser,
   // uploadPlmStyleImage,
 } from "../../services/api";
 import { materialSyncService } from "../../services/sync/material/materialSync.service";
@@ -525,30 +526,32 @@ export function useProjectSync({
 
       const syncedStylesList: { ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' | 'Material' }[] = [];
 
-      // Fail-fast if currentUser is null — this happens on mobile when fetchCurrentUser()
-      // hasn't resolved yet (race condition: user clicks Sync before the user profile API returns).
-      // Without this guard, all groups are silently skipped via the `continue` in the for-loop.
-      console.log(
-        "[useProjectSync] currentUser status:",
-        currentUser ? `loaded (userId=${currentUser.userId}, schema=${currentUser.activeSchema})` : "NULL — user profile not yet loaded",
-      );
-      if (!currentUser) {
-        throw new Error(
-          "User session is still loading. Please wait a moment and try Sync again.",
-        );
+      let activeUser = currentUser;
+      if (!activeUser) {
+        console.log("[useProjectSync] currentUser is null, attempting to fetch user profile dynamically...");
+        try {
+          activeUser = await fetchCurrentUser();
+          console.log("[useProjectSync] Dynamically loaded user:", activeUser.userId);
+        } catch (err) {
+          console.error("[useProjectSync] Failed to dynamically load user:", err);
+          throw new Error(
+            "User session is still loading or could not be loaded. Please check your connection, wait a moment, and try Sync again.",
+            { cause: err }
+          );
+        }
       }
 
       for (const group of groups) {
         if (!group.items[0]) continue;
         try {
           if (group.itemType === 'Material') {
-            const syncedMaterial = await materialSyncService.processMaterialGroup(group, currentUser, project.id, refreshItems);
+            const syncedMaterial = await materialSyncService.processMaterialGroup(group, activeUser, project.id, refreshItems);
             console.log("[useProjectSync] syncedMaterial:", syncedMaterial);
             if (syncedMaterial) {
               syncedStylesList.push(syncedMaterial);
             }
           } else {
-            const syncedStyle = await processStyleGroup(group, currentUser, project.id, refreshItems, project);
+            const syncedStyle = await processStyleGroup(group, activeUser, project.id, refreshItems, project);
             if (syncedStyle) {
               syncedStylesList.push(syncedStyle);
             }
