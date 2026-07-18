@@ -852,6 +852,40 @@
     }
   }
 
+  // Prevent iOS from switching to "18 Jul 2026" native format when focused.
+  // We apply the overlay trick even during focus on touch devices (where users 
+  // don't type dates directly but use the native scroll wheel picker).
+  @media (pointer: coarse) {
+    &:focus {
+      color: transparent !important;
+      text-shadow: 0 0 0 transparent !important;
+
+      &::-webkit-datetime-edit,
+      &::-webkit-datetime-edit-text,
+      &::-webkit-datetime-edit-fields-wrapper,
+      &::-webkit-date-and-time-value {
+        color: transparent !important;
+      }
+
+      &::before {
+        content: attr(data-date);
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--color-text-main, #1f2937) !important;
+        font-family: inherit;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        pointer-events: none;
+      }
+
+      :global(:root:not(.theme-light)) &::before {
+        color: #cbd5e1 !important;
+      }
+    }
+  }
+
   &::-webkit-calendar-picker-indicator {
     opacity: 0.5;
     cursor: pointer;

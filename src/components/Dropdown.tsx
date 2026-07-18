@@ -226,8 +226,8 @@ const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                           type="checkbox"
                           checked={isOptSelected}
                           className={styles.checkbox}
-                          readOnly
-                          style={{ pointerEvents: 'none' }}
+                          onChange={() => handleSelectOption(opt.value)}
+                          onClick={(e) => e.stopPropagation()}
                         />
                       )}
                       <span>{opt.label}</span>
