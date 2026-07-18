@@ -81,6 +81,15 @@ export default function AddStylesModal({
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
+            // Mobile browsers (iOS Safari, Android Chrome) require an explicit .play() call.
+            // Setting srcObject alone does NOT auto-play on mobile even with the autoPlay attribute.
+            // Without this, video.readyState never reaches HAVE_ENOUGH_DATA (4), so the
+            // scan loop never captures a frame and the QR scanner appears stuck/inactive.
+            try {
+              await videoRef.current.play();
+            } catch (playErr) {
+              console.warn('[AddStylesModal] video.play() failed (may be normal if already playing):', playErr);
+            }
           }
           setHasCameraPermission(true);
           setScanError('');
@@ -301,7 +310,10 @@ export default function AddStylesModal({
       if (!isScanning || !isOpen) return;
 
       const video = videoRef.current;
-      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+      // Use readyState >= 2 (HAVE_CURRENT_DATA) instead of === HAVE_ENOUGH_DATA (4).
+      // Mobile browsers (iOS/Android) often stay at readyState 3 (HAVE_FUTURE_DATA)
+      // and never reach 4, causing the scan loop to never capture a frame.
+      if (video && video.readyState >= 2) {
         if (!canvas) {
           canvas = document.createElement('canvas');
         }
@@ -400,6 +412,12 @@ export default function AddStylesModal({
                   muted
                   className={styles.videoElement}
                   style={{ display: hasCameraPermission ? 'block' : 'none' }}
+                  onLoadedMetadata={() => {
+                    // iOS Safari fallback: call play() when stream metadata is ready.
+                    // This handles cases where the explicit play() in startCamera fires
+                    // before the video element is fully ready to accept the stream.
+                    videoRef.current?.play().catch(() => {});
+                  }}
                 />
                 {!hasCameraPermission && (
                   <div className={styles.scannerPlaceholder}>

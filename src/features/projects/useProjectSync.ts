@@ -525,11 +525,25 @@ export function useProjectSync({
 
       const syncedStylesList: { ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' | 'Material' }[] = [];
 
+      // Fail-fast if currentUser is null — this happens on mobile when fetchCurrentUser()
+      // hasn't resolved yet (race condition: user clicks Sync before the user profile API returns).
+      // Without this guard, all groups are silently skipped via the `continue` in the for-loop.
+      console.log(
+        "[useProjectSync] currentUser status:",
+        currentUser ? `loaded (userId=${currentUser.userId}, schema=${currentUser.activeSchema})` : "NULL — user profile not yet loaded",
+      );
+      if (!currentUser) {
+        throw new Error(
+          "User session is still loading. Please wait a moment and try Sync again.",
+        );
+      }
+
       for (const group of groups) {
-        if (!group.items[0] || !currentUser) continue;
+        if (!group.items[0]) continue;
         try {
           if (group.itemType === 'Material') {
             const syncedMaterial = await materialSyncService.processMaterialGroup(group, currentUser, project.id, refreshItems);
+            console.log("[useProjectSync] syncedMaterial:", syncedMaterial);
             if (syncedMaterial) {
               syncedStylesList.push(syncedMaterial);
             }
