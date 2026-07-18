@@ -40,6 +40,17 @@ corsProxyApi.interceptors.request.use((config) => {
 let requestInterceptorId: number | null = null;
 let responseInterceptorId: number | null = null;
 
+/**
+ * Set to `true` before starting a project sync operation and back to `false`
+ * in the finally block. While true, the Axios 401/402 response interceptor
+ * will NOT redirect the browser to "/" — it will throw the error back to the
+ * sync's own try/catch so it can be handled gracefully without killing the page.
+ */
+export let syncInProgress = false;
+export function setSyncInProgress(value: boolean): void {
+  syncInProgress = value;
+}
+
 export const setupInterceptors = () => {
   if (requestInterceptorId !== null)
     api.interceptors.request.eject(requestInterceptorId);
@@ -104,6 +115,17 @@ export const setupInterceptors = () => {
         if (isUserInfoReq) {
           console.warn(
             "User info request failed with 401/402, bypassing force logout for development.",
+          );
+          return Promise.reject(err);
+        }
+
+        // If a sync operation is in progress, do NOT redirect — the page redirect
+        // would destroy the entire JS execution context and silently kill the sync.
+        // Instead, throw the error so the sync's try/catch can log it gracefully.
+        if (syncInProgress) {
+          console.error(
+            `[api] PLM API returned ${status} during active sync. Skipping redirect — error will be caught by sync handler.`,
+            error.config?.url,
           );
           return Promise.reject(err);
         }

@@ -7,6 +7,7 @@ import {
   createPlmJobTask,
   getPlmJobTaskItems,
   fetchPlmColorwayDetails,
+  setSyncInProgress,
   // uploadPlmStyleImage,
 } from "../../services/api";
 import { materialSyncService } from "../../services/sync/material/materialSync.service";
@@ -502,6 +503,11 @@ export function useProjectSync({
       prev ? { ...prev, section: PLM_SYNCED_SECTIONS[0] } : prev,
     );
 
+    // Signal to the Axios interceptor that a sync is active.
+    // This prevents 401/402 PLM API errors from triggering window.location.href = "/"
+    // which would kill the entire JS execution context mid-sync.
+    setSyncInProgress(true);
+
     try {
       const latestItems = await refreshItems(project.id);
       const groups = groupItemsByStyle(latestItems);
@@ -652,6 +658,8 @@ export function useProjectSync({
         "error",
       );
     } finally {
+      // Always restore normal auth-redirect behavior after sync completes/fails
+      setSyncInProgress(false);
       setIsSyncing(false);
     }
   }, [project, setProject, showToast, refreshItems, currentUser]);

@@ -35,6 +35,9 @@ export const materialSyncService = {
     const materialNode = materialList[0];
 
     if (!materialNode) {
+      console.warn(
+        `[MaterialSync] OData returned no material data for code "${firstItem.styleMaterialNumber}". PLM may have returned an empty result or the material may not exist in PLM. Skipping sync for this group.`,
+      );
       return;
     }
 
@@ -103,21 +106,28 @@ export const materialSyncService = {
       const styleColorwayId = match?.plmColorway?.MaterialColorwayId ?? match?.plmColorway?.MaterialColorwayID ?? match?.plmColorway?.Id ?? match?.plmColorway?.id;
       const finalColorId = styleColorwayId ? Number(styleColorwayId) : (item.colorId ?? 0);
 
-      await projectService.updateProjectItem(item.id, {
-        styleId: Number(sourceMaterialId),
-        colorId: finalColorId,
-        colorStatusId: item.colorStatusId ?? 0,
-        styleMaterialNumber: item.styleMaterialNumber,
-        styleMaterialName: item.styleMaterialName,
-        itemType: 'Material',
-        colorway: item.colorway,
-        colorwayStatus: item.colorwayStatus,
-        selectionCondition: item.selectionCondition || "As-Is",
-        sampleDue: item.sampleDue,
-        buyerComments: item.buyerComments,
-        internalComments: item.internalComments,
-        annotatedImage: item.annotatedImage,
-      });
+      try {
+        await projectService.updateProjectItem(item.id, {
+          styleId: Number(sourceMaterialId),
+          colorId: finalColorId,
+          colorStatusId: item.colorStatusId ?? 0,
+          styleMaterialNumber: item.styleMaterialNumber,
+          styleMaterialName: item.styleMaterialName,
+          itemType: 'Material',
+          colorway: item.colorway,
+          colorwayStatus: item.colorwayStatus,
+          selectionCondition: item.selectionCondition || "As-Is",
+          sampleDue: item.sampleDue,
+          buyerComments: item.buyerComments,
+          internalComments: item.internalComments,
+          annotatedImage: item.annotatedImage,
+        });
+      } catch (updateErr) {
+        console.error(
+          `[MaterialSync] Failed to update local DB for item ${item.id} (${item.styleMaterialNumber}):`,
+          updateErr,
+        );
+      }
     }
 
     await refreshItems(projectId);
