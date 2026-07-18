@@ -112,8 +112,8 @@ export async function buildStyleCopyPayload(
 
   const cond = (styleInput.selectionCondition ?? "").toLowerCase().trim();
   const isBigChange = cond.includes("big") && cond.includes("change");
-  const styleNameValue = isBigChange ? "Variant of" : "Copy of";
-  const taskId: "styleCopy" | "styleVariant" = isBigChange ? "styleVariant" : "styleCopy";
+  const styleNameValue = isBigChange ? "Copy of " : "Variant of ";
+  const taskId: "styleCopy" | "styleVariant" = isBigChange ? "styleCopy" : "styleVariant";
   const infoClusterString = buildInfoClusters(StyleId);
 
   // Compute idGenContextVal / idGenContextVal2 dynamically from the PLM ID Generator API.
