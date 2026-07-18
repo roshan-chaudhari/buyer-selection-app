@@ -508,7 +508,14 @@ export function useProjectSync({
       const totalStyles = groups.length;
       const totalColorways = latestItems.filter((i) => !!i.colorway).length;
 
-      console.log("[useProjectSync] Style breakdown:", groups);
+      // Avoid logging the full `groups` object — it contains large base64 `annotatedImage`
+      // strings that can crash the JS runtime on tablets when serialized by the console engine.
+      console.log(
+        "[useProjectSync] Style breakdown: total groups =",
+        groups.length,
+        "| styles =",
+        groups.map((g) => g.styleMaterialNumber),
+      );
 
       const syncedStylesList: { ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' | 'Material' }[] = [];
 
