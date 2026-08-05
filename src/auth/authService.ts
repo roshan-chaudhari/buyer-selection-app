@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { corsProxyApi } from '../services/api';
 
 import { type IonapiConfig, type TokenResponse } from '../types/api';
 export type { IonapiConfig, TokenResponse };
@@ -15,15 +15,12 @@ function buildTokenUrl(pu: string, ot: string = 'token.oauth2'): string {
 /**
  * Helper to send a POST request through the local Connect CORS proxy (/cors-proxy) to fetch the OAuth token.
  */
-const API_BASE =
-  "https://buyersectionapp-api-hxg5eqfrb6ezfzab.centralindia-01.azurewebsites.net";
-
 async function postTokenRequest(
   tokenUrl: string,
   params: URLSearchParams
 ): Promise<TokenResponse> {
-  const response = await axios.post<TokenResponse>(
-    `${API_BASE}/cors-proxy`,
+  const response = await corsProxyApi.post<TokenResponse>(
+    "",
     params.toString(),
     {
       headers: {
@@ -129,6 +126,9 @@ export function handleIonapiUpload(file: File): Promise<IonapiConfig> {
  * to the Infor PLM authorization page.
  */
 export function loginWithIonapi(config: IonapiConfig): void {
+
+   console.log("IONAPI CONFIG:", config);
+
   localStorage.setItem("ci", config.ci || "");
   localStorage.setItem("cs", config.cs || "");
   localStorage.setItem("ti", config.ti || "");
@@ -143,6 +143,10 @@ export function loginWithIonapi(config: IonapiConfig): void {
   localStorage.setItem("pu1", puVal);
 
   const redirect = `${config.pu || ""}${config.oa || ""}?client_id=${encodeURIComponent(config.ci || "")}&AuthMode=Prompt&response_type=code&redirect_uri=${encodeURIComponent(config.ru || "")}&TenantId=${encodeURIComponent(config.ti || "")}`;
+  
+   console.log("Redirect URI:", config.ru);
+  console.log("Redirect URL:", redirect);
+  
   window.location.href = redirect;
 }
 

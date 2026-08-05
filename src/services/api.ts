@@ -2,13 +2,31 @@ import axios from "axios";
 import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
+const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+console.log("defaultBaseUrl",defaultBaseUrl);
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "",
+  baseURL: defaultBaseUrl,
 });
 
 export const corsProxyApi = axios.create({
-  baseURL: (import.meta.env.VITE_API_BASE_URL || "") + "/cors-proxy",
+  baseURL: defaultBaseUrl ? `${defaultBaseUrl}/cors-proxy` : "/cors-proxy",
 });
+
+
+/**
+ * Dynamically loads the runtime configurations from the backend.
+ * This function is called during application initialization (before rendering App).
+ */
+export async function initializeConfig(): Promise<void> {
+  try {
+      corsProxyApi.defaults.baseURL = defaultBaseUrl ? `${defaultBaseUrl}/cors-proxy` : "/cors-proxy";
+      console.log(`[Config] Dynamically configured API base URL to: "${defaultBaseUrl}"`);
+      return;
+  } catch (error: any) {
+    console.warn("Failed to load runtime configuration from backend, using fallback:", error.message);
+  }
+}
 
 function buildTargetUrl(endpoint: string, iu: string, ti: string): string {
   const baseUrl = iu.trim().endsWith("/") ? iu.trim() : `${iu.trim()}/`;
@@ -33,7 +51,9 @@ corsProxyApi.interceptors.request.use((config) => {
   const ti = localStorage.getItem("ti");
   if (!iu || !ti) return config;
 
-  config.headers["x-target-url"] = buildTargetUrl(config.url || "", iu, ti);
+  if (!config.headers["x-target-url"]) {
+    config.headers["x-target-url"] = buildTargetUrl(config.url || "", iu, ti);
+  }
   return config;
 });
 
@@ -667,7 +687,7 @@ export async function fetchStyleImage(
     // which is faster, memory-efficient, and avoids CORS canvas issues.
     const directUrl = imgAttachment.Image || imgAttachment.ImageCustom || imgAttachment.ImageThumb;
     if (directUrl) {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const baseUrl = api.defaults.baseURL || "";
       return `${baseUrl}/api/projects/proxy-image?url=${encodeURIComponent(directUrl)}`;
     }
 
