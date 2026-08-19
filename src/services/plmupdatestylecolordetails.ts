@@ -138,7 +138,6 @@ export function buildSaveColorwayPayload(params: {
  */
 export async function savePlmStyleColorways(payload: SaveColorwayRequestPayload): Promise<any> {
   const token = getStoredToken();
-  console.log("[savePlmStyleColorways] Sending Payload:", JSON.stringify(payload, null, 2));
   try {
     const response = await api.post(
       "/api/pdm/style/colorways/save",

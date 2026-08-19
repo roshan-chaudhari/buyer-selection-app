@@ -3,7 +3,6 @@ import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
 const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
-console.log("defaultBaseUrl", defaultBaseUrl);
 
 export const api = axios.create({
   baseURL: defaultBaseUrl,
@@ -13,7 +12,6 @@ export const corsProxyApi = axios.create({
   baseURL: defaultBaseUrl ? `${defaultBaseUrl}/cors-proxy` : "/cors-proxy",
 });
 
-
 /**
  * Dynamically loads the runtime configurations from the backend.
  * This function is called during application initialization (before rendering App).
@@ -21,7 +19,6 @@ export const corsProxyApi = axios.create({
 export async function initializeConfig(): Promise<void> {
   try {
     corsProxyApi.defaults.baseURL = defaultBaseUrl ? `${defaultBaseUrl}/cors-proxy` : "/cors-proxy";
-    console.log(`[Config] Dynamically configured API base URL to: "${defaultBaseUrl}"`);
     return;
   } catch (error: any) {
     console.warn("Failed to load runtime configuration from backend, using fallback:", error.message);
@@ -432,18 +429,6 @@ export const odata2styleCopy = {
 };
 //#endregion
 
-// ── Quick Test: Call GenericLookUpAll with GlrefId=1 and GlValId=4 ───────────
-// Remove this block once confirmed working
-/*(async () => {
-  try {
-    console.log("[OData2] Calling getStyleData with filter: StyleId eq 449");
-    const result = await odata2style.getStyleData({ StyleId: 449 });
-    console.log("[OData2] getStyleData Response:", JSON.stringify(result));
-  } catch (err) {
-    console.error("[OData2] getStyleData failed:", err);
-  }
-})(); */
-
 // ── PLM Attachment Query Payload ─────────────────────────────────────────────
 export const getPlmAttachmentGridBody = (
   finalStyleId: number | string,
@@ -644,9 +629,6 @@ export async function fetchStyleImage(
   const body = getPlmAttachmentGridBody(styleId, schema, userId, roleId);
   const token = getStoredToken();
 
-  const apiStart = performance.now();
-  console.log(`[PERFORMANCE LOG] fetchStyleImage API request started for StyleId ${styleId} at ${new Date().toISOString()}`);
-
   try {
     const response = await api.post<any>(
       "/api/odata2/view/entity/data/get",
@@ -655,9 +637,6 @@ export async function fetchStyleImage(
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
-
-    const apiEnd = performance.now();
-    console.log(`[PERFORMANCE LOG] fetchStyleImage API request completed. Duration: ${(apiEnd - apiStart).toFixed(2)}ms`);
 
     const responseData = response.data;
     if (!responseData) return null;
@@ -683,8 +662,6 @@ export async function fetchStyleImage(
     if (!imgAttachment) return null;
 
     // If a direct S3 URL exists, return the proxy URL directly.
-    // The backend will stream the binary image directly to the browser,
-    // which is faster, memory-efficient, and avoids CORS canvas issues.
     const directUrl = imgAttachment.Image || imgAttachment.ImageCustom || imgAttachment.ImageThumb;
     if (directUrl) {
       const baseUrl = api.defaults.baseURL || "";
@@ -715,17 +692,11 @@ export async function fetchStyleImage(
 
 /**
  * Fetches the full PLM "Style" entity column node for a given StyleId.
- * Uses getPlmAttachmentGridBody under the hood and returns ONLY the Style
- * entity's column data — all scalar fields, free fields, user-defined fields,
- * dates, etc. — stripping attachments and other child entities.
- *
- * Returns null if the style is not found or the call fails.
  */
 export async function fetchPlmStyleDetails(
   styleId: number | string,
   currentUser: any
 ): Promise<Record<string, unknown> | null> {
-  console.log(`[fetchPlmStyleDetails] Called with styleId: ${styleId}`, "currentUser:", currentUser);
   if (!styleId || !currentUser) {
     console.warn(`[fetchPlmStyleDetails] Missing styleId or currentUser. styleId: ${styleId}`);
     return null;
@@ -738,11 +709,7 @@ export async function fetchPlmStyleDetails(
   const body = getPlmAttachmentGridBody(styleId, schema, userId, roleId);
   const token = getStoredToken();
 
-  // console.log(`[fetchPlmStyleDetails] Built body:`, JSON.stringify(body, null, 2));
-  // console.log(`[fetchPlmStyleDetails] Stored Token exists: ${!!token}`);
-
   try {
-    console.log(`[fetchPlmStyleDetails] Sending POST request to /api/odata2/view/entity/data/get...`);
     const response = await api.post<any>(
       "/api/odata2/view/entity/data/get",
       body,
@@ -752,9 +719,6 @@ export async function fetchPlmStyleDetails(
     );
 
     const responseData = response.data;
-    console.log(`[fetchPlmStyleDetails] Received response. Status: ${response.status}`);
-    console.log(`[fetchPlmStyleDetails] responseData for StyleId ${styleId}:`, JSON.stringify(responseData, null, 2));
-
     if (!responseData) {
       console.warn(`[fetchPlmStyleDetails] Empty responseData received for StyleId ${styleId}`);
       return null;
@@ -762,27 +726,24 @@ export async function fetchPlmStyleDetails(
 
     // Navigate to the entities array (handles both wrapped and flat responses)
     const entities: any[] = responseData.entities || responseData.d?.entities || [];
-    console.log(`[fetchPlmStyleDetails] Extracted entities count: ${entities.length}`);
 
     // Find the "Style" entity node
     const styleEntity = entities.find(
       (e: any) => e.name === "Style" || e.Name === "Style"
     );
     if (!styleEntity) {
-      console.warn(`[fetchPlmStyleDetails] Style entity node not found in entities array for StyleId ${styleId}. Entities:`, entities);
+      console.warn(`[fetchPlmStyleDetails] Style entity node not found in entities array for StyleId ${styleId}.`);
       return null;
     }
 
     // Return the column object — the flat Style record with all PLM fields
     const column = styleEntity.column || styleEntity.Column;
-    console.log(`[fetchPlmStyleDetails] Extracted Style columns keys:`, Object.keys(column || {}));
     return (column as Record<string, unknown>) ?? null;
   } catch (err) {
-    console.error(`[fetchPlmStyleDetails] Failed to fetch PLM node for StyleId ${styleId}. Error details:`, err);
+    console.error(`[fetchPlmStyleDetails] Failed to fetch PLM node for StyleId ${styleId}:`, err);
     throw err;
   }
 }
-
 
 export async function fetchPlmColorwayDetails(
   styleId: number | string,
@@ -807,8 +768,6 @@ export async function fetchPlmColorwayDetails(
     );
 
     const responseData = response.data;
-    console.log(`[fetchPlmColorwayDetails] responseData for StyleId ${styleId}:`, JSON.stringify(responseData, null, 2));
-
     if (!responseData) return null;
 
     // Navigate to the entities array (handles both wrapped and flat responses)
@@ -820,7 +779,6 @@ export async function fetchPlmColorwayDetails(
       .map((e: any) => e.column || e.Column)
       .filter((c: any) => c != null);
 
-    console.log(`[fetchPlmColorwayDetails] Extracted ${colorways.length} StyleColorways:`, JSON.stringify(colorways, null, 2));
     return colorways;
   } catch (err) {
     console.error(`[fetchPlmColorwayDetails] Failed to fetch colorways for StyleId ${styleId}:`, err);
@@ -914,10 +872,6 @@ export async function uploadPlmStyleImage(
   const endpoint = "FASHIONPLM/documents/api/document/UploadFile/";
   const targetUrl = buildTargetUrl(endpoint, iu, ti);
 
-  console.log(`[uploadPlmStyleImage] ─── Starting Image Upload ───`);
-  console.log(`[uploadPlmStyleImage] Forwarding via /cors-proxy to: ${targetUrl}`);
-  console.log(`[uploadPlmStyleImage] Has Token: ${Boolean(token)}`);
-
   const isFormData = typeof FormData !== "undefined" && payload instanceof FormData;
 
   try {
@@ -932,7 +886,6 @@ export async function uploadPlmStyleImage(
         },
       },
     );
-    console.log(`[uploadPlmStyleImage] Success Response:`, response.data);
     return response.data;
   } catch (err: any) {
     console.error(`[uploadPlmStyleImage] Request Failed! Target was: ${targetUrl}`, err);
@@ -958,10 +911,6 @@ export async function savePlmDocument(
   const endpoint = "FASHIONPLM/documents/api/document/SaveMetadata/";
   const targetUrl = buildTargetUrl(endpoint, iu, ti);
 
-  console.log(`[savePlmDocument] ─── Starting Document Save ───`);
-  console.log(`[savePlmDocument] Forwarding via /cors-proxy to: ${targetUrl}`);
-  console.log(`[savePlmDocument] Payload:`, JSON.stringify(payload, null, 2));
-
   try {
     const response = await corsProxyApi.post<any>(
       endpoint,
@@ -974,7 +923,6 @@ export async function savePlmDocument(
         },
       },
     );
-    console.log(`[savePlmDocument] Success Response:`, response.data);
     return response.data;
   } catch (err: any) {
     console.error(`[savePlmDocument] Request Failed! Target was: ${targetUrl}`, err);
@@ -986,13 +934,11 @@ export async function savePlmDocument(
   }
 }
 
-
 export const odata2material = {
   getMaterialData: async (
     params: { MaterialId?: number; MaterialCode?: string; MaterialName?: string; search?: string;[key: string]: unknown } = {},
   ): Promise<unknown> => {
     const token = getStoredToken();
-    console.log("[odata2material.getMaterialData] Called with params:", JSON.stringify(params, null, 2));
 
     const filterParts = params.search
       ? `(MaterialCode eq '${String(params.search).replace(/'/g, "''")}' or MaterialName eq '${String(params.search).replace(/'/g, "''")}')`

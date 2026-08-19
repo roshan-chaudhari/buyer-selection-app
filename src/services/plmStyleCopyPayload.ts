@@ -273,9 +273,5 @@ export async function buildStyleCopyPayload(
     CustomData: customData,
   };
 
-  console.log(
-    `[buildStyleCopyPayload] Generated request payload for StyleId ${StyleId} (${StyleCode}):\n${JSON.stringify(payload, null, 2)}`,
-  );
-
   return payload;
 }

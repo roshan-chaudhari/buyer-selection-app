@@ -126,9 +126,6 @@ export function handleIonapiUpload(file: File): Promise<IonapiConfig> {
  * to the Infor PLM authorization page.
  */
 export function loginWithIonapi(config: IonapiConfig): void {
-
-   console.log("IONAPI CONFIG:", config);
-
   localStorage.setItem("ci", config.ci || "");
   localStorage.setItem("cs", config.cs || "");
   localStorage.setItem("ti", config.ti || "");
@@ -143,9 +140,6 @@ export function loginWithIonapi(config: IonapiConfig): void {
   localStorage.setItem("pu1", puVal);
 
   const redirect = `${config.pu || ""}${config.oa || ""}?client_id=${encodeURIComponent(config.ci || "")}&AuthMode=Prompt&response_type=code&redirect_uri=${encodeURIComponent(config.ru || "")}&TenantId=${encodeURIComponent(config.ti || "")}`;
-  
-   console.log("Redirect URI:", config.ru);
-  console.log("Redirect URL:", redirect);
   
   window.location.href = redirect;
 }

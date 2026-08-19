@@ -21,22 +21,9 @@ interface AnnotationDrawerProps {
   isLocked?: boolean;
 }
 
-const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+import { formatDisplayImageUrl } from '../../utils/image';
 
-function formatDisplayImageUrl(url: string | null | undefined): string {
-  if (!url) return '';
-  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
-    return url;
-  }
-  if (url.includes('/api/projects/proxy-image') || url.includes('/api/projects/s3-image')) {
-    return url;
-  }
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
-
+/** Calculates editor menu position based on viewport width */
 function getMenuPosition(): 'left' | 'bottom' {
   const width = document.documentElement.clientWidth || window.innerWidth;
   return width < 1024 ? 'bottom' : 'left';
@@ -130,9 +117,6 @@ export default function AnnotationDrawer({
     const initialImage = formatDisplayImageUrl(initialRaw);
     lastLoadedUrlRef.current = initialImage;
 
-    console.log(`[PERFORMANCE LOG] Initializing ImageEditor for Style ${item.styleMaterialNumber}. Initial image source: ${initialImage.substring(0, 50)}...`);
-    const editorInitStart = performance.now();
-
     try {
       const editor = new ImageEditor(containerRef.current, {
         includeUI: {
@@ -154,13 +138,11 @@ export default function AnnotationDrawer({
       });
 
       editorRef.current = editor;
-      console.log(`[PERFORMANCE LOG] ImageEditor initialized. Duration: ${(performance.now() - editorInitStart).toFixed(2)}ms`);
 
       return () => {
         if (editorRef.current) {
           editorRef.current.destroy();
           editorRef.current = null;
-          console.log("[PERFORMANCE LOG] ImageEditor destroyed.");
         }
       };
     } catch (err) {
@@ -180,7 +162,6 @@ export default function AnnotationDrawer({
       return;
     }
 
-    const startTime = performance.now();
     let targetImage = DEFAULT_GARMENT_SVG;
     if (currentIndex === 0) {
       targetImage = (skippedToTemplate ? null : plmImageUrl) || DEFAULT_GARMENT_SVG;
@@ -196,13 +177,7 @@ export default function AnnotationDrawer({
     }
     lastLoadedUrlRef.current = resolvedUrl;
 
-    console.log(`[PERFORMANCE LOG] Loading URL: ${resolvedUrl.substring(0, 50)}...`);
-
     editorRef.current.loadImageFromURL(resolvedUrl, `Image-${currentIndex}`)
-      .then(() => {
-        const endTime = performance.now();
-        console.log(`[PERFORMANCE LOG] Image loaded & rendered successfully inside editor. Duration: ${(endTime - startTime).toFixed(2)}ms`);
-      })
       .catch((err) => {
         console.warn("[AnnotationDrawer] Failed to load image in editor, falling back to PLM image:", err);
         if (plmImageUrl && resolvedUrl !== formatDisplayImageUrl(plmImageUrl)) {
@@ -404,7 +379,6 @@ export default function AnnotationDrawer({
       const newUrlsSet = new Set(s3UrlImages);
       for (const oldUrl of oldS3Urls) {
         if (!newUrlsSet.has(oldUrl)) {
-          console.log(`[AnnotationDrawer] Removing replaced S3 image copy: ${oldUrl}`);
           await projectService.deleteImageFromS3(oldUrl);
         }
       }

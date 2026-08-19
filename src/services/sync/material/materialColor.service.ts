@@ -25,39 +25,6 @@ export function buildSaveMaterialColorwayPayload(params: {
   const userId = Number(params.currentUser.userId);
   const schema = params.currentUser.activeSchema;
 
-  console.log("[buildSaveMaterialColorwayPayload] Starting payload construction for:", {
-    materialId: params.materialId,
-    materialCode: params.materialCode,
-    matchedColorwaysCount: params.matchedColorways.length,
-    userId,
-    schema
-  });
-
-  // const formatDateToMMDDYYYY = (dateStr?: string | null) => {
-  //   if (!dateStr) {
-  //     const d = new Date();
-  //     const mm = String(d.getMonth() + 1).padStart(2, '0');
-  //     const dd = String(d.getDate()).padStart(2, '0');
-  //     const yyyy = d.getFullYear();
-  //     const result = `${mm}/${dd}/${yyyy}`;
-  //     return result;
-  //   }
-  //   const d = new Date(dateStr);
-  //   if (!isNaN(d.getTime())) {
-  //     const mm = String(d.getMonth() + 1).padStart(2, '0');
-  //     const dd = String(d.getDate()).padStart(2, '0');
-  //     const yyyy = d.getFullYear();
-  //     const result = `${mm}/${dd}/${yyyy}`;
-  //     return result;
-  //   }
-  //   const parts = dateStr.split('-');
-  //   if (parts.length === 3) {
-  //     const result = `${parts[1]}/${parts[2].split('T')[0]}/${parts[0]}`;
-  //     return result;
-  //   }
-  //   return dateStr;
-  // };
-
   const dtoList = params.matchedColorways.map(({ plmColorway, projItem }) => {
     const materialColorwayId = plmColorway.MaterialColorwayId ?? plmColorway.MaterialColorwayID ?? plmColorway.id ?? plmColorway.Id;
 
@@ -110,6 +77,5 @@ export function buildSaveMaterialColorwayPayload(params: {
     Schema: schema,
   };
 
-  console.log("[buildSaveMaterialColorwayPayload] Final constructed payload:", JSON.stringify(finalPayload, null, 2));
   return finalPayload;
 }

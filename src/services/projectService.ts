@@ -16,6 +16,27 @@ export interface BackendProject {
   lastUpdated: string;
 }
 
+export interface ProjectItem {
+  id?: number;
+  projectId: number;
+  styleId?: number;
+  colorId?: number;
+  styleMaterialNumber: string;
+  styleMaterialName: string;
+  itemType?: 'Style' | 'Material';
+  colorway: string;
+  colorwayStatus: string;
+  colorStatusId?: number;
+  selectionCondition: string;
+  sampleDue: string | null;
+  buyerComments: string;
+  internalComments: string;
+  annotatedImage?: string | null;
+  createdDate?: string;
+  colorwaysWithIds?: { colorway: string; colorId: number }[];
+}
+
+/** Maps backend database project payload into UI TableType */
 const mapBackendToTableType = (p: any): TableType => ({
   id: p.id,
   ProjectName: p.projectName || p.ProjectName || '',
@@ -42,9 +63,8 @@ const mapBackendToTableType = (p: any): TableType => ({
   ),
 });
 
-//#region Project Service
 export const projectService = {
-
+  /** Fetches all projects from database */
   getAllProjects: async (): Promise<TableType[]> => {
     try {
       const { data } = await api.get('/api/projects');
@@ -52,11 +72,12 @@ export const projectService = {
         return data.data.map(mapBackendToTableType);
       }
       return [];
-    } catch (err: unknown) {
+    } catch {
       return [];
     }
   },
 
+  /** Creates a new project in database */
   createProject: async (
     project: { name: string; buyerName: string; buyerId?: number; description: string; selectionDate: string; itemsCount?: number },
     currentUser?: InforUser | null
@@ -86,6 +107,7 @@ export const projectService = {
     }
   },
 
+  /** Updates an existing project metadata in database */
   updateProject: async (
     id: number,
     project: { name: string; buyerName: string; buyerId?: number; description: string; selectionDate: string; itemsCount?: number; section?: string },
@@ -116,6 +138,7 @@ export const projectService = {
     }
   },
 
+  /** Deletes a project from database */
   deleteProject: async (
     id: number,
     currentUser?: InforUser | null
@@ -129,15 +152,13 @@ export const projectService = {
       const { data } = await api.delete(`/api/projects/${id}`, {
         params: { userId, userName },
       });
-      if (data && data.success) {
-        return true;
-      }
-      throw new Error(data?.message || 'Failed to delete project');
+      return Boolean(data && data.success);
     } catch (err: unknown) {
       throw new Error(getErrorMessage(err), { cause: err });
     }
   },
 
+  /** Fetches items for a specific project */
   getItemsForProject: async (projectId: number): Promise<ProjectItem[]> => {
     try {
       const { data } = await api.get(`/api/projects/${projectId}/items`);
@@ -145,11 +166,12 @@ export const projectService = {
         return data.data as ProjectItem[];
       }
       return [];
-    } catch (err: unknown) {
+    } catch {
       return [];
     }
   },
 
+  /** Adds a new item to a project */
   addItemToProject: async (
     projectId: number,
     item: Omit<ProjectItem, 'id' | 'projectId'>
@@ -165,6 +187,7 @@ export const projectService = {
     }
   },
 
+  /** Updates an item in a project */
   updateProjectItem: async (
     itemId: number,
     item: Omit<ProjectItem, 'id' | 'projectId'>
@@ -180,25 +203,22 @@ export const projectService = {
     }
   },
 
+  /** Deletes an item from a project */
   deleteProjectItem: async (
     itemId: number
   ): Promise<boolean> => {
     try {
       const { data } = await api.delete(`/api/projects/items/${itemId}`);
-      if (data && data.success) {
-        return true;
-      }
-      throw new Error(data?.message || 'Failed to delete item');
+      return Boolean(data && data.success);
     } catch (err: unknown) {
       throw new Error(getErrorMessage(err), { cause: err });
     }
   },
 
+  /** Sets project IsLock = 1 and section = 'Syncro PLM' in database */
   lockProject: async (id: number): Promise<TableType> => {
     try {
-      console.log(`[projectService.lockProject] Sending lock request to DB for project ${id}...`);
       const { data } = await api.patch(`/api/projects/${id}/lock`);
-      console.log(`[projectService.lockProject] Backend lock response:`, data);
       const projData = data?.data || data?.project;
       if (projData && (projData.id || projData.projectName)) {
         return mapBackendToTableType(projData);
@@ -208,11 +228,11 @@ export const projectService = {
       }
       throw new Error(data?.message || 'Failed to lock project');
     } catch (err: unknown) {
-      console.error(`[projectService.lockProject] Error locking project ${id}:`, err);
       throw new Error(getErrorMessage(err), { cause: err });
     }
   },
 
+  /** Uploads an image to S3 via backend proxy/service */
   uploadImageToS3: async (params: {
     projectName: string;
     styleName: string;
@@ -221,17 +241,6 @@ export const projectService = {
     fileName?: string;
     itemId?: number;
   }): Promise<{ key: string; url: string; fileName: string }> => {
-    console.log('[projectService.uploadImageToS3] Initiating image upload with params:', {
-      projectName: params.projectName,
-      styleName: params.styleName,
-      fileName: params.fileName,
-      itemId: params.itemId,
-      hasFile: !!params.file,
-      fileSize: params.file?.size,
-      hasBase64: !!params.base64Data,
-      base64Length: params.base64Data?.length,
-    });
-
     try {
       let response;
       if (params.file) {
@@ -242,12 +251,10 @@ export const projectService = {
         if (params.fileName) formData.append('fileName', params.fileName);
         if (params.itemId) formData.append('itemId', String(params.itemId));
 
-        console.log('[projectService.uploadImageToS3] Sending multipart/form-data to /api/projects/upload-image');
         response = await api.post('/api/projects/upload-image', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       } else {
-        console.log('[projectService.uploadImageToS3] Sending JSON payload to /api/projects/upload-image');
         response = await api.post('/api/projects/upload-image', {
           projectName: params.projectName,
           styleName: params.styleName,
@@ -257,63 +264,36 @@ export const projectService = {
         });
       }
 
-      console.log('[projectService.uploadImageToS3] Backend response received:', response.data);
-
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }
       throw new Error(response.data?.message || 'Failed to upload image to S3');
     } catch (err: unknown) {
-      console.error('[projectService.uploadImageToS3] Upload failed:', err);
       throw new Error(getErrorMessage(err), { cause: err });
     }
   },
 
+  /** Deletes an image from S3 storage */
   deleteImageFromS3: async (urlOrKey: string): Promise<boolean> => {
     try {
-      console.log(`[projectService.deleteImageFromS3] Requesting deletion of S3 image: ${urlOrKey}`);
       const { data } = await api.delete('/api/projects/s3-image', {
         params: { url: urlOrKey },
       });
-      return data?.success || false;
-    } catch (err: unknown) {
-      console.warn('[projectService.deleteImageFromS3] Failed to delete image from S3:', err);
+      return Boolean(data?.success);
+    } catch {
       return false;
     }
   },
 
+  /** Deletes all images belonging to a style from S3 */
   deleteStyleImagesFromS3: async (projectName: string, styleName: string): Promise<boolean> => {
     try {
-      console.log(`[projectService.deleteStyleImagesFromS3] Requesting batch deletion for style "${styleName}" in project "${projectName}"`);
       const { data } = await api.delete('/api/projects/style-images', {
         params: { projectName, styleName },
       });
-      return data?.success || false;
-    } catch (err: unknown) {
-      console.warn('[projectService.deleteStyleImagesFromS3] Failed to delete style images from S3:', err);
+      return Boolean(data?.success);
+    } catch {
       return false;
     }
   },
-
 };
-
-export interface ProjectItem {
-  id?: number;
-  projectId: number;
-  styleId?: number;
-  colorId?: number;
-  styleMaterialNumber: string;
-  styleMaterialName: string;
-  itemType?: 'Style' | 'Material';
-  colorway: string;
-  colorwayStatus: string;
-  colorStatusId?: number;
-  selectionCondition: string;
-  sampleDue: string | null;
-  buyerComments: string;
-  internalComments: string;
-  annotatedImage?: string | null;
-  createdDate?: string;
-  colorwaysWithIds?: { colorway: string; colorId: number }[];
-}
-//#endregion

@@ -215,11 +215,8 @@ export default function AddStylesModal({
             itemType: "Style" as const,
           };
         }
-      } catch (err) {
-        console.log(
-          "[AddStylesModal] Style lookup failed, checking material...",
-          err,
-        );
+      } catch {
+        // Fall through to material lookup
       }
 
       // 2. Try material lookup
@@ -228,38 +225,15 @@ export default function AddStylesModal({
           ? { MaterialId: Number(code) }
           : { search: code };
 
-        console.log(
-          "[AddStylesModal] Initiating Material lookup with query params:",
-          JSON.stringify(materialQueryParams, null, 2),
-        );
         const response =
           await odata2material.getMaterialData(materialQueryParams);
-        console.log(
-          "[AddStylesModal] Material lookup response received:",
-          response
-            ? "Yes (length: " + JSON.stringify(response).length + ")"
-            : "No",
-        );
         const materialList = extractODataList<any>(response);
-        console.log(
-          "[AddStylesModal] Extracted materialList count:",
-          materialList.length,
-        );
 
         if (materialList.length > 0) {
-          console.log(
-            "[AddStylesModal] Found Material in PLM:",
-            JSON.stringify(materialList[0], null, 2),
-          );
           return {
             styleObj: materialList[0],
             itemType: "Material" as const,
           };
-        } else {
-          console.log(
-            "[AddStylesModal] Material list is empty for code:",
-            code,
-          );
         }
       } catch (err) {
         console.error(

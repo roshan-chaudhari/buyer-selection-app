@@ -98,60 +98,40 @@ export async function buildIdGenContextValues(
   // Unwrap `d` envelope if present
   const r = rawResponse as Record<string, unknown>;
   const data: IdGeneratorResponse = (r?.d ?? rawResponse) as IdGeneratorResponse;
-  const dat =JSON.parse(JSON.stringify(data))
-
-  // ── DEBUG: show what we received from PLM ──────────────────────────────────
-  console.log("[IdGen DEBUG] 📥 dat (after d-unwrap):", dat);
-
+  const dat = JSON.parse(JSON.stringify(data));
 
   const idgenlookup1 = (dat.idRulesDetails.lookupField1 ?? "").replace(/\s/g, "");
   const idgenlookup2 = (dat.idRulesDetails.lookupField2 ?? "").replace(/\s/g, "");
   const datnumber = (dat.idRulesDetails?.autoNumberVal ?? []) as AutoNumberSegment[];
-  
 
   // Filter "Contextual Value" segments ordered by seq
   const contextualSegments = datnumber
     .filter((v) => v.formatTypeName === "Contextual Value")
     .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
 
-  console.log("[IdGen DEBUG] 🧩 contextualSegments found:", contextualSegments.length, contextualSegments);
-
   // Build idGenContextVal — Code/Name values in seq order
   const contextValues: string[] = [];
 
   for (const seg of contextualSegments) {
-    console.log("[IdGen DEBUG] 🔄 Processing segment:", seg);
     if (seg.fieldId == null) {
-      console.log("[IdGen DEBUG]   ⚠️  fieldId is null — pushing empty");
       contextValues.push("");
       continue;
     }
     const glrefId = seg.fieldId;
     const fieldName = GLREF_TO_FIELD[glrefId];
-    console.log("fieldName",fieldName)
     const entityId = fieldName ? (styleData[fieldName] as number | null | undefined) : null;
     const codeOrName: "Code" | "Name" = seg.codeNameId === 1 ? "Name" : "Code";
 
-    console.log(`[IdGen DEBUG]   glrefId=${glrefId} → fieldName=${fieldName} → entityId=${entityId} → use ${codeOrName}`);
-
     const item = await fetchLookupItem(glrefId, entityId);
-    console.log(`[IdGen DEBUG]   fetchLookupItem result:`, item);
-
     const val = item ? (codeOrName === "Name" ? (item.Name ?? "") : (item.Code ?? "")) : "";
-    console.log(`[IdGen DEBUG]   → value="${val}"`);
     contextValues.push(val);
   }
 
   // e.g. ["K","S26"]
   const extxzval = contextValues.join('","');
   const newContextFieldValue = `["${extxzval}"]`;
-  console.log("[IdGen DEBUG] ✅ newContextFieldValue:", newContextFieldValue);
-
 
   // ── Step 3: Build idGenContextVal2 — {FieldName, Value} pairs ────────────────
-  // lookupField1 / lookupField2 are field names like "DivisionId", "SeasonId".
-  // Value = the raw integer ID from styleData (no lookup needed).
-
   const resolveVal = (fieldName: string): number | null => {
     if (!fieldName) return null;
     const v = styleData[fieldName];
@@ -173,9 +153,6 @@ export async function buildIdGenContextValues(
     newContextFieldValue2 = `[{"FieldName":"${idgenlookup1}","Value":${v1 ?? "null"}},{"FieldName":"${idgenlookup2}","Value":${v2 ?? "null"}}]`;
   }
 
-  console.log("[IdGenContext] 🔑 newContextFieldValue  :", newContextFieldValue);
-  console.log("[IdGenContext] 🔑 newContextFieldValue2 :", newContextFieldValue2);
-
   return { newContextFieldValue, newContextFieldValue2 };
 }
 
@@ -185,21 +162,6 @@ export async function buildIdGenContextValues(
  * Full pipeline: calls the PLM ID Generator API, parses the response,
  * resolves generic lookup values for the style's context fields, and
  * returns the two computed context strings ready to be used in a job payload.
- *
- * This is the ONLY function external callers need to import.
- *
- * @param autoNumberId  - The PLM auto-number definition ID (e.g. "StyleNumber")
- * @param schema        - The active tenant schema from currentUser.activeSchema
- * @param styleData     - The style's context fields (BrandId, CollectionId, etc.)
- *
- * @returns {
- *   newContextFieldValue  — e.g. ["K","S26"]
- *   newContextFieldValue2 — e.g. [{"FieldName":"BrandId","Value":12}]
- * }
- *
- * Usage:
- *   const { newContextFieldValue, newContextFieldValue2 } =
- *     await computeIdGenContextValues({ autoNumberId, schema, styleData });
  */
 export async function computeIdGenContextValues(params: {
   autoNumberId: string;
@@ -211,13 +173,8 @@ export async function computeIdGenContextValues(params: {
   // ── Step 1: Call PLM ID Generator API ──────────────────────────────────────
   const rawResponse = await getIdGeneratorDetails({ autoNumberId, Schema: schema });
 
-  console.log("[computeIdGenContextValues] 📥 Raw idgenerator response:", JSON.stringify(rawResponse, null, 2));
-
   // ── Step 2: Build and return context values ────────────────────────────────
   const result = await buildIdGenContextValues(rawResponse, styleData);
-
-  console.log("[computeIdGenContextValues] 🔑 newContextFieldValue  :", result.newContextFieldValue);
-  console.log("[computeIdGenContextValues] 🔑 newContextFieldValue2 :", result.newContextFieldValue2);
 
   return result;
 }

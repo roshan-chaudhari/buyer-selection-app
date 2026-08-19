@@ -50,42 +50,8 @@ function buildColorwayOptions(
   };
 }
 
-const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
-
-function formatDisplayImageUrl(url: string): string {
-  if (!url) return '';
-  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
-    return url;
-  }
-  if (url.includes('/api/projects/proxy-image')) {
-    return url;
-  }
-  if (url.includes('amazonaws.com') || url.includes('buyerapp-image')) {
-    return `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
-
-function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string {
-  if (plmUrl) {
-    return formatDisplayImageUrl(plmUrl);
-  }
-  if (imgStr) {
-    if (imgStr.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(imgStr);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const first = parsed[0];
-          const val = (typeof first === 'object' ? first.annotated || first.original : first) || '';
-          if (val) return formatDisplayImageUrl(val);
-        }
-      } catch (e) { }
-    } else if (imgStr.startsWith('http') || imgStr.startsWith('data:') || imgStr.startsWith('blob:')) {
-      return formatDisplayImageUrl(imgStr);
-    }
-  }
-  return DEFAULT_GARMENT_SVG;
-}
+// Use shared getFirstImage helper from src/utils/image
+import { getFirstImage } from "../../utils/image";
 
 export function useProjectColumns({
   plmColorwaysMap,

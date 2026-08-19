@@ -29,7 +29,6 @@ export const styleOverviewService = {
     projectName: string;
   }): Promise<void> => {
     const { newStyleId, projItem, currentUser, buyerId, projectName } = params;
-    console.log(`[StyleOverviewService] Starting Style Overview update for StyleId: ${newStyleId}`);
 
     try {
       // 1. Fetch latest style details to get RowVersionText and all style fields
@@ -77,7 +76,6 @@ export const styleOverviewService = {
 
         if (matchedOpt) {
           statusVal = matchedOpt.glValId || matchedOpt.GlValId || matchedOpt.id || matchedOpt.Id || 1;
-          console.log(`[StyleOverviewService] Matched status "${projItem.colorwayStatus}" to ID: ${statusVal}`);
         } else {
           // If no direct name match, see if projItem.colorStatusId exists and use it
           statusVal = Number(projItem.colorStatusId || styleDetails.Status || styleDetails.ProductMaterialStatus || 1);
@@ -123,10 +121,7 @@ export const styleOverviewService = {
         Schema: currentUser.activeSchema,
       };
 
-      console.log(`[StyleOverviewService] Sending Style Overview update request for StyleId ${newStyleId}...`);
-      console.log("[StyleOverviewService] Style Overview Request Payload:", JSON.stringify(payload, null, 2));
-      const updateRes = await savePlmStyleOverview(payload);
-      console.log(`[StyleOverviewService] Style Overview updated successfully:`, updateRes);
+      await savePlmStyleOverview(payload);
     } catch (err) {
       console.error(`[StyleOverviewService] Failed to update Style Overview for StyleId ${newStyleId}:`, err);
     }

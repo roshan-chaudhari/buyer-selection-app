@@ -49,7 +49,6 @@ export default function NewProjectModal({
       try {
         const buyersList = await odata2Service.getLookupOptions(103);
         setBuyers(buyersList);
-        console.log('[NewProjectModal] Loaded buyers:', buyersList);
       } catch (err) {
         console.error('[NewProjectModal] Failed to load buyers:', err);
       }

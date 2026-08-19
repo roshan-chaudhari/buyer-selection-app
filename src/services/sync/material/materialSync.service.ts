@@ -16,7 +16,6 @@ export const materialSyncService = {
     projectId: number,
     refreshItems: (id: number) => Promise<ProjectItem[]>,
   ): Promise<{ ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Material' } | undefined> => {
-    console.log(`[MaterialSync] Starting processMaterialGroup for material: ${group.styleMaterialNumber}`);
     const firstItem = group.items[0];
     if (!firstItem) {
       console.warn(`[MaterialSync] Group has no items. Skipping.`);

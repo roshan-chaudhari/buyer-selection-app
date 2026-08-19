@@ -36,7 +36,7 @@ export function useAuth() {
       setError(null);
       exchangeCodeForToken(code)
         .then((tokenData: TokenResponse) => {
-          console.log("Token received via code exchange:", tokenData);
+          //console.log("Token received via code exchange:", tokenData);
           const tokenDataWithTimestamp = {
             ...tokenData,
             retrieved_at: Date.now()
@@ -48,11 +48,10 @@ export function useAuth() {
         })
         .catch((err: unknown) => {
           console.error("Code exchange error:", err);
-          
+
           // If we already have a valid token stored in localStorage, redirect directly to dashboard
           const existingToken = getStoredToken();
           if (existingToken) {
-            console.log("Code exchange failed, but found existing token. Redirecting to dashboard.");
             window.history.replaceState({}, document.title, '/dashboard');
             return;
           }
@@ -80,7 +79,6 @@ export function useAuth() {
     const checkToken = () => {
       const rawToken = localStorage.getItem('accessToken');
       if (rawToken && isTokenExpired(rawToken)) {
-        console.log("Token expired. Auto-logging out...");
         localStorage.removeItem('accessToken');
         localStorage.removeItem('session');
         setToken(null);
@@ -121,15 +119,6 @@ export function useAuth() {
     }
 
     void loadUser();
-  }, [token]);
-
-  // [DEV] Log current token whenever it changes — visible in DevTools console
-  useEffect(() => {
-    if (token) {
-      console.log('%c[AUTH] Active Token', 'color: #22c55e; font-weight: bold;', token);
-    } else {
-      console.log('%c[AUTH] Token cleared / not authenticated', 'color: #ef4444; font-weight: bold;');
-    }
   }, [token]);
 
   const logout = () => {

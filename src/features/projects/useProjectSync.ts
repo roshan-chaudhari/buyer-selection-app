@@ -24,13 +24,14 @@ import {
 } from "../../services/plmupdatestylecolordetails";
 import { projectService, type ProjectItem } from "../../services/projectService";
 import { extractODataList } from "../../utils/odata";
+import { resolveImageBlob } from "../../utils/image";
 import type { InforUser } from "../../types/api";
 import type { TableType } from "../../types/table";
 import type { GroupedStyle } from "../../types/projects";
 import { PLM_SYNCED_SECTIONS } from "./constants";
 import { groupItemsByStyle } from "./ProjectDetailsHelpers";
-
 import type { ToastType } from "../../hooks/useToast";
+
 type ShowToastFn = (message: string, type?: ToastType) => void;
 
 interface UseProjectSyncProps {
@@ -41,8 +42,7 @@ interface UseProjectSyncProps {
   currentUser: InforUser | null;
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
-
+/** Resolves StyleId from items or by querying PLM for alphanumeric StyleCode */
 async function resolveGroupStyleId(
   _firstItem: ProjectItem,
   group: GroupedStyle,
@@ -57,15 +57,12 @@ async function resolveGroupStyleId(
     return Number(group.styleMaterialNumber);
   }
 
-  // Attempt to resolve the StyleId from PLM using the alphanumeric StyleCode
   try {
-    console.log(`[useProjectSync] Attempting to resolve StyleId from PLM for code: ${group.styleMaterialNumber}`);
     const response = await odata2styleCopy.getStyleDatacopy({ StyleCode: group.styleMaterialNumber });
     const styleList = extractODataList<any>(response);
     if (styleList.length > 0) {
       const foundId = styleList[0].StyleId ?? styleList[0].Id;
       if (foundId) {
-        console.log(`[useProjectSync] Dynamically resolved StyleId: ${foundId} for group ${group.styleMaterialNumber}`);
         return Number(foundId);
       }
     }
@@ -76,6 +73,7 @@ async function resolveGroupStyleId(
   return undefined;
 }
 
+/** Extracts target style code from PLM background job task items */
 function extractNewStyleCode(_jobResponse: any, taskItemsResponse: any): string {
   const taskItemsList = extractODataList<any>(taskItemsResponse);
   const taskItem =
@@ -97,6 +95,7 @@ function extractNewStyleCode(_jobResponse: any, taskItemsResponse: any): string 
   );
 }
 
+/** Matches PLM colorway details with project colorway items */
 function matchColorways(
   newStyleDetails: any[],
   groupItems: ProjectItem[],
@@ -120,6 +119,7 @@ function matchColorways(
   return matched;
 }
 
+/** Collects all unique image references from a style group */
 function extractAllImageRefs(group: GroupedStyle, firstItem?: ProjectItem): string[] {
   const images: string[] = [];
   const seen = new Set<string>();
@@ -130,7 +130,6 @@ function extractAllImageRefs(group: GroupedStyle, firstItem?: ProjectItem): stri
     if (str === "" || str === "null" || str === "undefined" || str === "[]" || str === "{}") {
       return;
     }
-    // Handle double stringification
     if (str.startsWith('"') && str.endsWith('"')) {
       try {
         str = JSON.parse(str);
@@ -153,9 +152,7 @@ function extractAllImageRefs(group: GroupedStyle, firstItem?: ProjectItem): stri
             }
           }
         }
-      } catch (e) {
-        console.warn("[useProjectSync] Failed to parse annotatedImage JSON array:", e);
-      }
+      } catch { }
       return;
     }
 
@@ -196,12 +193,12 @@ function extractAllImageRefs(group: GroupedStyle, firstItem?: ProjectItem): stri
   return images;
 }
 
+/** Extracts a clean file name from an image reference */
 function extractImageFileName(imageRef: string, fallbackName?: string): string {
   if (!imageRef) return `${fallbackName || 'style'}.jpg`;
 
   let target = String(imageRef).trim();
 
-  // 1. If it's a proxy URL, extract the real inner S3 URL
   if (target.includes('url=')) {
     try {
       const parsedUrl = new URL(target, 'http://localhost');
@@ -212,7 +209,6 @@ function extractImageFileName(imageRef: string, fallbackName?: string): string {
     } catch { }
   }
 
-  // 2. Strip any query parameters or hash (e.g. S3 presigned params ?X-Amz-...) and extract filename
   try {
     const urlObj = new URL(target, 'http://localhost');
     const pathname = urlObj.pathname;
@@ -225,7 +221,6 @@ function extractImageFileName(imageRef: string, fallbackName?: string): string {
     }
   } catch { }
 
-  // 3. Extract pure filename directly from path without any alterations
   const cleanTarget = target.split('?')[0].split('#')[0];
   const lastSlash = Math.max(cleanTarget.lastIndexOf('/'), cleanTarget.lastIndexOf('\\'));
   const rawFileName = lastSlash !== -1 ? cleanTarget.substring(lastSlash + 1) : cleanTarget;
@@ -237,20 +232,17 @@ function extractImageFileName(imageRef: string, fallbackName?: string): string {
   return `${fallbackName || 'style'}.jpg`;
 }
 
+/** Generates a standard UUID string */
 export function generateUUID(): string {
   const globalCrypto: Crypto | undefined =
     typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
 
-  // 1. Native, spec-guaranteed v4 UUID.
   if (globalCrypto?.randomUUID) {
     return globalCrypto.randomUUID();
   }
 
-  // 2. Cryptographically secure random bytes, assembled by hand.
   if (globalCrypto?.getRandomValues) {
     const bytes = globalCrypto.getRandomValues(new Uint8Array(16));
-
-    // Per RFC 4122 §4.4: set version (4) and variant (10xx) bits.
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
@@ -264,7 +256,6 @@ export function generateUUID(): string {
     ].join("-");
   }
 
-  // 3. Math.random fallback — not cryptographically secure.
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -272,7 +263,7 @@ export function generateUUID(): string {
   });
 }
 
-
+/** Processes PLM duplication, image upload, colorways, and overview for a style group */
 async function processStyleGroup(
   group: GroupedStyle,
   currentUser: InforUser,
@@ -280,26 +271,21 @@ async function processStyleGroup(
   refreshItems: (id: number) => Promise<ProjectItem[]>,
   project: TableType,
 ): Promise<{ ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' } | undefined> {
-  console.log(`[useProjectSync] Starting processStyleGroup for styleMaterialNumber: ${group.styleMaterialNumber}`);
   const firstItem = group.items[0];
-  if (!firstItem) {
-    console.warn(`[useProjectSync] No items found in group ${group.styleMaterialNumber}. Exiting processStyleGroup.`);
-    return;
-  }
+  if (!firstItem) return;
 
   const resolvedStyleId = await resolveGroupStyleId(firstItem, group);
-  console.log(`[useProjectSync] resolvedStyleId: ${resolvedStyleId} for group ${group.styleMaterialNumber}`);
-
   if (!resolvedStyleId) {
-    console.warn(`[useProjectSync] No valid StyleId could be resolved for group ${group.styleMaterialNumber}. Skipping sync for this group.`);
+    console.warn(`[useProjectSync] No valid StyleId could be resolved for group ${group.styleMaterialNumber}. Skipping.`);
     return;
   }
 
   const styleNode = await fetchPlmStyleDetails(resolvedStyleId, currentUser);
   if (!styleNode) {
-    console.warn(`[useProjectSync] fetchPlmStyleDetails returned null for StyleId ${resolvedStyleId}. Exiting processStyleGroup.`);
+    console.warn(`[useProjectSync] fetchPlmStyleDetails returned null for StyleId ${resolvedStyleId}. Exiting.`);
     return;
   }
+
   // 1. Extract style input and build copy payload
   const styleInput = extractStyleInputFromNode(styleNode);
   styleInput.selectionCondition = firstItem.selectionCondition;
@@ -313,12 +299,7 @@ async function processStyleGroup(
   );
 
   // 2. Post copy job to PLM
-  const jobResponse = await createPlmJobTask(
-    payload as unknown as Record<string, unknown>,
-  );
-  console.log(
-    `[useProjectSync] Copy job response for StyleId ${resolvedStyleId}:\n${JSON.stringify(jobResponse, null, 2)}`,
-  );
+  const jobResponse = await createPlmJobTask(payload as unknown as Record<string, unknown>);
 
   // 3. Wait for PLM background copy to complete
   await new Promise((resolve) => setTimeout(resolve, 4000));
@@ -330,111 +311,46 @@ async function processStyleGroup(
     (jobResponse as any)?.jobId;
 
   if (!taskItemKey) {
-    console.warn(
-      `[useProjectSync] No taskItemKey found in job response for ${group.styleMaterialNumber}.`,
-    );
+    console.warn(`[useProjectSync] No taskItemKey found in job response for ${group.styleMaterialNumber}.`);
     return;
   }
 
-  console.log(
-    `[useProjectSync] Querying job task items for key: "${taskItemKey}"`,
-  );
   const taskItemsResponse = await getPlmJobTaskItems({
     taskKeys: [String(taskItemKey)],
     Schema: currentUser.activeSchema,
   });
-  console.log(
-    "[useProjectSync] Task items response:",
-    JSON.stringify(taskItemsResponse, null, 2),
-  );
 
   const newStyleCode = extractNewStyleCode(jobResponse, taskItemsResponse);
-
   if (!newStyleCode) {
-    console.warn(
-      `[useProjectSync] Newly created StyleCode not found for ${group.styleMaterialNumber}. Skipping.`,
-    );
+    console.warn(`[useProjectSync] Newly created StyleCode not found for ${group.styleMaterialNumber}. Skipping.`);
     return;
   }
 
   // 5. Search PLM for the newly created style
-  const styleSearchResponse = await odata2styleCopy.getStyleDatacopy({
-    StyleCode: newStyleCode,
-  });
+  const styleSearchResponse = await odata2styleCopy.getStyleDatacopy({ StyleCode: newStyleCode });
   const foundStyles = extractODataList<any>(styleSearchResponse);
 
   if (foundStyles.length === 0) {
-    console.warn(
-      `[useProjectSync] Newly created style "${newStyleCode}" not found in search.`,
-    );
+    console.warn(`[useProjectSync] Newly created style "${newStyleCode}" not found in search.`);
     return;
   }
 
   const newStyle = foundStyles[0];
   const newStyleId = newStyle.StyleId ?? newStyle.Id;
-  const newStyleName = String(
-    newStyle.StyleNumber ?? newStyle.Name ?? newStyle.StyleName ?? "",
-  );
-  console.log(
-    `[useProjectSync] Found new style: "${newStyleCode}" with StyleId ${newStyleId}`,
-  );
+  const newStyleName = String(newStyle.StyleNumber ?? newStyle.Name ?? newStyle.StyleName ?? "");
 
-
-  async function resolveImageBlob(imgRef: string): Promise<Blob | null> {
-    if (!imgRef) return null;
-
-    if (imgRef.startsWith("data:")) {
-      try {
-        const res = await fetch(imgRef);
-        return await res.blob();
-      } catch {
-        return null;
-      }
-    }
-
-    try {
-      const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
-      const proxyUrl = imgRef.includes("/api/projects/proxy-image")
-        ? imgRef
-        : `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(imgRef)}`;
-
-      const res = await fetch(proxyUrl);
-      if (res.ok) {
-        return await res.blob();
-      }
-    } catch (err) {
-      console.warn("[useProjectSync] Failed to fetch image via proxy, trying direct fetch:", err);
-    }
-
-    try {
-      const directRes = await fetch(imgRef);
-      if (directRes.ok) {
-        return await directRes.blob();
-      }
-    } catch (err) {
-      console.error("[useProjectSync] Direct fetch failed for image:", err);
-    }
-
-    return null;
-  }
-
-  // 5.1 add images in new style from S3 / annotated image (upload all images for this style)
+  // 5.1 Upload style images from S3 / annotated image
   const imageRefs = extractAllImageRefs(group, firstItem);
 
   if (imageRefs.length > 0) {
-    console.log(`[useProjectSync] Found ${imageRefs.length} style image(s) for StyleId ${newStyleId} ("${newStyleCode}"). Preparing upload...`);
-
     for (let imgIdx = 0; imgIdx < imageRefs.length; imgIdx++) {
       const imgRef = imageRefs[imgIdx];
-      console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Preparing style image upload for StyleId ${newStyleId} from: ${imgRef}`);
       try {
-        // 1. Fetch image binary blob from S3
         const imgBlob = await resolveImageBlob(imgRef);
         if (!imgBlob) {
           throw new Error(`Could not fetch image binary data from: ${imgRef}`);
         }
 
-        // 2. Build metadata attachment object
         const objGuid = generateUUID();
         const rawBaseUrl =
           import.meta.env.VITE_PLM_BASE_URL ||
@@ -452,7 +368,7 @@ async function processStyleGroup(
             name: null,
             note: null,
             dlType: 11,
-            type: "styleImages"
+            type: "styleImages",
           },
           referenceId: Number(newStyleId),
           modifyDate: "0001-01-01T00:00:00",
@@ -461,10 +377,9 @@ async function processStyleGroup(
           objectId: 0,
           originalObjectName,
           objectStream: null,
-          tempId: generateUUID()
+          tempId: generateUUID(),
         };
 
-        // 3. Build Multipart FormData matching Infor PLM specifications
         const formData = new FormData();
         formData.append("file", imgBlob, originalObjectName);
         formData.append("atta", JSON.stringify(atta));
@@ -473,13 +388,8 @@ async function processStyleGroup(
         formData.append("schema", currentUser.activeSchema || "FSH4");
         formData.append("overwrite", "false");
 
-        console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Uploading style image to PLM for style "${newStyleCode}" with StyleId ${newStyleId}...`);
-        console.log(`[useProjectSync] Attachment metadata (atta):`, JSON.stringify(atta, null, 2));
-
         const uploadResponse = await uploadPlmStyleImage(formData);
-        console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Upload response:`, JSON.stringify(uploadResponse, null, 2));
 
-        // 4. Save and assign uploaded image in style via PLM document save API
         if (uploadResponse) {
           const addedFile =
             (uploadResponse?.addedFiles && uploadResponse.addedFiles[0]) ||
@@ -524,40 +434,16 @@ async function processStyleGroup(
             Schema: uploadResponse?.Schema || currentUser.activeSchema || "FSH4",
           };
 
-          console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Saving and assigning style image for StyleId ${newStyleId} (StyleCode: "${newStyleCode}")...`);
-          console.log(`[useProjectSync] Document Save Payload:`, JSON.stringify(saveDocumentPayload, null, 2));
-
-          const saveDocResponse = await savePlmDocument(saveDocumentPayload);
-          console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Document save response:`, JSON.stringify(saveDocResponse, null, 2));
+          await savePlmDocument(saveDocumentPayload);
         }
       } catch (uploadErr: any) {
-        console.error(`[useProjectSync] Failed to upload/assign style image ${imgIdx + 1}/${imageRefs.length} to PLM for style "${newStyleCode}":`, uploadErr);
-        if (uploadErr.response) {
-          console.log("[useProjectSync] Upload error response status:", uploadErr.response.status);
-          console.log("[useProjectSync] Upload error response data:", JSON.stringify(uploadErr.response.data, null, 2));
-        }
+        console.error(`[useProjectSync] Failed to upload style image ${imgIdx + 1}/${imageRefs.length} for style "${newStyleCode}":`, uploadErr);
       }
     }
-  } else {
-    console.log(`[useProjectSync] No annotated images found for style "${newStyleCode}". Skipping image upload.`);
   }
 
-  //5.2 add image in new style from document library.
-
-
-
-
-
-
   // 6. Fetch full details of the newly created style
-  const newStyleDetails = await fetchPlmColorwayDetails(
-    newStyleId,
-    currentUser,
-  );
-  console.log(
-    `[useProjectSync] Newly created Style Details for StyleId ${newStyleId}:\n${JSON.stringify(newStyleDetails, null, 2)}`,
-  );
-
+  const newStyleDetails = await fetchPlmColorwayDetails(newStyleId, currentUser);
 
   // 7. Match and save project colorways to PLM
   const matchedColorways = Array.isArray(newStyleDetails)
@@ -565,9 +451,6 @@ async function processStyleGroup(
     : [];
 
   if (matchedColorways.length > 0) {
-    console.log(
-      `[useProjectSync] Found ${matchedColorways.length} matched colorways for style ${newStyleCode}.`,
-    );
     const savePayload = buildSaveColorwayPayload({
       newStyleId: Number(newStyleId),
       newStyleCode,
@@ -575,23 +458,10 @@ async function processStyleGroup(
       matchedColorways,
       currentUser,
     });
-    console.log(
-      `[useProjectSync] Saving colorways payload:`,
-      JSON.stringify(savePayload, null, 2),
-    );
-    const saveResult = await savePlmStyleColorways(savePayload);
-    console.log(
-      `[useProjectSync] Colorways saved successfully:`,
-      JSON.stringify(saveResult, null, 2),
-    );
-  } else {
-    console.log(
-      `[useProjectSync] No matching colorways found for style ${newStyleCode}.`,
-    );
+    await savePlmStyleColorways(savePayload);
   }
 
-  // Perform additional Style Overview update after colorway update completes
-  console.log(`[useProjectSync] Completing Style Overview update for style ${newStyleCode}...`);
+  // 8. Update Style Overview after colorway update completes
   await styleOverviewService.updateStyleOverviewAfterSync({
     newStyleId,
     projItem: firstItem,
@@ -599,22 +469,6 @@ async function processStyleGroup(
     buyerId: project.BuyerId || null,
     projectName: project.ProjectName || "",
   });
-
-
-
-
-
-  // 8. Update local database with new style and colorway details
-  // console.log(
-  //   `[useProjectSync] Updating local database for ${group.items.length} items of style ${group.styleMaterialNumber}...`,
-  // );
-  // await updateLocalItems(
-  //   group.items,
-  //   matchedColorways,
-  //   newStyleId,
-  //   newStyleCode,
-  //   newStyleName,
-  // );
 
   // 9. Refresh UI
   await refreshItems(projectId);
@@ -627,8 +481,7 @@ async function processStyleGroup(
   };
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
-
+/** Custom hook handling the full project PLM synchronization and post-sync locking lifecycle */
 export function useProjectSync({
   project,
   setProject,
@@ -652,9 +505,6 @@ export function useProjectSync({
       prev ? { ...prev, section: PLM_SYNCED_SECTIONS[0] } : prev,
     );
 
-    // Signal to the Axios interceptor that a sync is active.
-    // This prevents 401/402 PLM API errors from triggering window.location.href = "/"
-    // which would kill the entire JS execution context mid-sync.
     setSyncInProgress(true);
 
     try {
@@ -663,27 +513,16 @@ export function useProjectSync({
       const totalStyles = groups.length;
       const totalColorways = latestItems.filter((i) => !!i.colorway).length;
 
-      // Avoid logging the full `groups` object — it contains large base64 `annotatedImage`
-      // strings that can crash the JS runtime on tablets when serialized by the console engine.
-      console.log(
-        "[useProjectSync] Style breakdown: total groups =",
-        groups.length,
-        "| styles =",
-        groups.map((g) => g.styleMaterialNumber),
-      );
-
       const syncedStylesList: { ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' | 'Material' }[] = [];
 
       let activeUser = currentUser;
       if (!activeUser) {
-        console.log("[useProjectSync] currentUser is null, attempting to fetch user profile dynamically...");
         try {
           activeUser = await fetchCurrentUser();
-          console.log("[useProjectSync] Dynamically loaded user:", activeUser.userId);
         } catch (err) {
-          console.error("[useProjectSync] Failed to dynamically load user:", err);
+          console.error("[useProjectSync] Failed to load user profile:", err);
           throw new Error(
-            "User session is still loading or could not be loaded. Please check your connection, wait a moment, and try Sync again.",
+            "User session is still loading. Please check your connection and try Sync again.",
             { cause: err }
           );
         }
@@ -694,7 +533,6 @@ export function useProjectSync({
         try {
           if (group.itemType === 'Material') {
             const syncedMaterial = await materialSyncService.processMaterialGroup(group, activeUser, project.id, refreshItems);
-            console.log("[useProjectSync] syncedMaterial:", syncedMaterial);
             if (syncedMaterial) {
               syncedStylesList.push(syncedMaterial);
             }
@@ -705,14 +543,11 @@ export function useProjectSync({
             }
           }
         } catch (nodeErr) {
-          console.error(
-            `[useProjectSync] Failed to process PLM copy task for ${group.styleMaterialNumber}:`,
-            nodeErr,
-          );
+          console.error(`[useProjectSync] Failed to process PLM task for ${group.styleMaterialNumber}:`, nodeErr);
         }
       }
 
-      // 0. Create Project in Plm and add all style in that projects
+      // Step 0: Create Project container in PLM and link all synced styles
       if (currentUser && syncedStylesList.length > 0) {
         const checkBrokenRules = (data: any) => {
           if (data?.brokenRules && Array.isArray(data.brokenRules)) {
@@ -724,33 +559,28 @@ export function useProjectSync({
         };
 
         try {
-          console.log("[useProjectSync] Step 0: Creating project in PLM...", project.ProjectName);
           const createPayload = {
             project: {
               projectId: "0",
               code: project.ProjectName,
               name: project.ProjectName,
               description: project.Description ?? "",
-              projectDetail: []
+              projectDetail: [],
             },
             roleId: Number(currentUser.activeRoleId ?? 1005),
             modifyId: Number(currentUser.userId),
             userId: Number(currentUser.userId),
-            Schema: currentUser.activeSchema
+            Schema: currentUser.activeSchema,
           };
 
-          console.log("[useProjectSync] Sending project create payload:", JSON.stringify(createPayload, null, 2));
           const createRes = await api.post<any>("/api/pdm/project/save", createPayload, {
-            headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}
+            headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {},
           });
-          console.log("[useProjectSync] Project create response:", JSON.stringify(createRes.data, null, 2));
 
           const resData = createRes.data;
-
-          // Check for broken rules in successful response
           const hasConflict = checkBrokenRules(resData) || checkBrokenRules(resData?.data);
           if (hasConflict) {
-            throw new Error("PROJECT.CODE_ALREADY_EXISTS", { cause: hasConflict });
+            throw new Error(`Project code "${project.ProjectName}" already exists in PLM (PROJECT.CODE_ALREADY_EXISTS). Please rename the project before syncing.`);
           }
 
           const key = resData?.key ?? resData?.data?.key;
@@ -763,7 +593,7 @@ export function useProjectSync({
               ItemId: style.ItemId,
               ItemName: style.ItemName,
               ItemNumber: style.ItemNumber,
-              Type: style.ItemType || "Style"
+              Type: style.ItemType || "Style",
             }));
 
             const updatePayload = {
@@ -772,40 +602,41 @@ export function useProjectSync({
                 code: project.ProjectName,
                 name: project.ProjectName,
                 description: project.Description ?? "",
-                projectDetail
+                projectDetail,
               },
               rowVersionText: firstRowVersion,
               roleId: Number(currentUser.activeRoleId ?? 1005),
               modifyId: Number(currentUser.userId),
               userId: Number(currentUser.userId),
-              Schema: currentUser.activeSchema
+              Schema: currentUser.activeSchema,
             };
 
-            console.log("[useProjectSync] Sending project update payload with styles:", JSON.stringify(updatePayload, null, 2));
             const updateRes = await api.post<any>("/api/pdm/project/save", updatePayload, {
-              headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}
+              headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {},
             });
-            console.log("[useProjectSync] Project update response:", JSON.stringify(updateRes.data, null, 2));
+
+            const updateResData = updateRes.data;
+            const updateConflict = checkBrokenRules(updateResData) || checkBrokenRules(updateResData?.data);
+            if (updateConflict) {
+              throw new Error(`Project code "${project.ProjectName}" already exists in PLM (PROJECT.CODE_ALREADY_EXISTS).`, { cause: updateConflict });
+            }
           } else {
-            console.error("[useProjectSync] PLM Project save did not return key or rowVersionText.");
+            throw new Error("PLM Project save did not return key or rowVersionText.");
           }
         } catch (projErr: any) {
-          console.error("[useProjectSync] Step 0: Failed to create project container or add styles in PLM:", projErr);
+          console.error("[useProjectSync] Failed to create project container or add styles in PLM:", projErr);
           const errData = projErr?.response?.data;
           const hasConflict = checkBrokenRules(errData) || checkBrokenRules(errData?.data);
           if (hasConflict) {
-            console.warn("[useProjectSync] PLM Project code already exists in PLM. Styles have been synced. Proceeding to finalize and lock project in DB.");
-          } else {
-            console.warn("[useProjectSync] Non-fatal PLM Project container save warning:", projErr);
+            throw new Error(`Project code "${project.ProjectName}" already exists in PLM (PROJECT.CODE_ALREADY_EXISTS). Please rename the project before syncing.`, { cause: projErr });
           }
+          throw projErr;
         }
       }
 
-      // Lock the project in the database so it becomes read-only for all users
-      console.log(`[useProjectSync] Updating database lock status (IsLock = 1) for project ID ${project.id}...`);
+      // Lock is the final step — only executed after all PLM operations succeed 100%
       const lockedProject = await projectService.lockProject(project.id);
       setProject(lockedProject);
-      console.log(`[useProjectSync] Project ${project.id} locked in database successfully:`, lockedProject);
 
       showToast(
         `Project synchronized — ${totalStyles} style(s), ${totalColorways} colorway(s) loaded.`,
@@ -820,7 +651,6 @@ export function useProjectSync({
         "error",
       );
     } finally {
-      // Always restore normal auth-redirect behavior after sync completes/fails
       setSyncInProgress(false);
       setIsSyncing(false);
     }
