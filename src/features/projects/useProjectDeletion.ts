@@ -26,6 +26,14 @@ export function useProjectDeletion({ project, showToast, refreshItems }: UseProj
     if (!deleteStyleTarget) return;
     setIsDeletingStyle(true);
     try {
+      // 1. Delete all images belonging to this style from AWS S3
+      if (project?.ProjectName && deleteStyleTarget.styleMaterialNumber) {
+        await projectService.deleteStyleImagesFromS3(
+          project.ProjectName,
+          deleteStyleTarget.styleMaterialNumber,
+        );
+      }
+
       await Promise.all(
         deleteStyleTarget.items.map((item) =>
           item.id ? projectService.deleteProjectItem(item.id) : Promise.resolve(),

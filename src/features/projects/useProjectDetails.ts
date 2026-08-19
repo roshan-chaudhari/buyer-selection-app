@@ -146,18 +146,27 @@ export function useProjectDetails({
       const target = items.find((it) => it.id === itemId);
       if (!target) return;
       try {
-        await projectService.updateProjectItem(itemId, {
-          styleMaterialNumber: target.styleMaterialNumber,
-          styleMaterialName: target.styleMaterialName,
-          colorway: target.colorway,
-          colorwayStatus: target.colorwayStatus,
-          colorStatusId: target.colorStatusId,
-          selectionCondition: target.selectionCondition,
-          sampleDue: target.sampleDue,
-          buyerComments: target.buyerComments,
-          internalComments: target.internalComments,
-          annotatedImage: annotatedDataUrl,
-        });
+        const matchingItems = items.filter(
+          (it) => it.styleMaterialNumber === target.styleMaterialNumber
+        );
+        await Promise.all(
+          matchingItems.map((it) =>
+            it.id
+              ? projectService.updateProjectItem(it.id, {
+                  styleMaterialNumber: it.styleMaterialNumber,
+                  styleMaterialName: it.styleMaterialName,
+                  colorway: it.colorway,
+                  colorwayStatus: it.colorwayStatus,
+                  colorStatusId: it.colorStatusId,
+                  selectionCondition: it.selectionCondition,
+                  sampleDue: it.sampleDue,
+                  buyerComments: it.buyerComments,
+                  internalComments: it.internalComments,
+                  annotatedImage: annotatedDataUrl,
+                })
+              : Promise.resolve()
+          )
+        );
         showToast("Annotation saved successfully!");
         if (project?.id) await refreshItems(project.id);
       } catch (err) {

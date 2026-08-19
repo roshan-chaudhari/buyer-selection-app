@@ -188,6 +188,12 @@ export default function Table<T>({
                     onClick={() => handleHeaderClick(column)}
                     role={column.sortable ? 'button' : undefined}
                     tabIndex={column.sortable ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (column.sortable && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        handleHeaderClick(column);
+                      }
+                    }}
                   >
                     <div className={styles.thContent}>
                       <span>{column.header}</span>
@@ -250,6 +256,16 @@ export default function Table<T>({
                       onClick={() => {
                         setInternalSelectedRow(row);
                         if (onRowClick) onRowClick(row);
+                      }}
+                      tabIndex={onRowClick ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (onRowClick && (e.key === 'Enter' || e.key === ' ')) {
+                          if (e.target === e.currentTarget) {
+                            e.preventDefault();
+                            setInternalSelectedRow(row);
+                            onRowClick(row);
+                          }
+                        }
                       }}
                     >
                       {renderExpandedRow && (

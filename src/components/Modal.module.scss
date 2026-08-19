@@ -59,6 +59,13 @@
     color: var(--color-text-main, #111827);
     background-color: var(--color-bg-main, #f3f4f6);
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
+    color: var(--color-text-main, #111827);
+    background-color: var(--color-bg-main, #f3f4f6);
+  }
 }
 
 .modalBody {

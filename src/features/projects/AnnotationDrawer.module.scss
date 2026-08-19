@@ -319,6 +319,12 @@
   &:hover:not(.active) {
     color: var(--color-text-main, #111827);
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 1px !important;
+    box-shadow: 0 0 0 2px var(--color-bg-surface, #ffffff), 0 0 0 4px rgba(0, 114, 237, 0.4) !important;
+  }
 }
 
 .btnTextMobileHidden {
@@ -326,4 +332,12 @@
     display: none;
   }
 }
+
+.lockedContainer {
+  :global(.tui-image-editor-controls),
+  :global(.tui-image-editor-submenu) {
+    display: none !important;
+  }
+}
+
 

@@ -44,6 +44,12 @@
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
   flex: 1;
   min-width: 0; // allow the bar to shrink on small screens
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+  &:focus-within {
+    border-color: var(--color-primary, #0072ED);
+    box-shadow: 0 0 0 3px rgba(0, 114, 237, 0.25);
+  }
 
   @media (max-width: 400px) {
     padding: 0.5rem 0.625rem;
@@ -96,6 +102,12 @@
   transition: color 0.15s ease;
 
   &:hover {
+    color: var(--color-text-main, #374151);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 1px !important;
     color: var(--color-text-main, #374151);
   }
 }
@@ -153,6 +165,12 @@
     &:hover {
       background-color: var(--table-header-hover-bg);
       color: #ffffff;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #ffffff !important;
+      outline-offset: -2px !important;
+      background-color: var(--table-header-hover-bg) !important;
     }
   }
 
@@ -213,6 +231,12 @@
       :global(:root:not(.theme-light)) & {
         background-color: rgba(255, 255, 255, 0.03) !important;
       }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary, #0072ED) !important;
+      outline-offset: -2px !important;
+      background-color: rgba(0, 114, 237, 0.08) !important;
     }
   }
 
@@ -298,8 +322,10 @@
     background-color: rgba(0, 114, 237, 0.05);
   }
   
-  &:focus {
-    outline: none;
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
+    background-color: rgba(0, 114, 237, 0.1) !important;
   }
 }
 

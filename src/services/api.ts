@@ -3,7 +3,7 @@ import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
 const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
-console.log("defaultBaseUrl",defaultBaseUrl);
+console.log("defaultBaseUrl", defaultBaseUrl);
 
 export const api = axios.create({
   baseURL: defaultBaseUrl,
@@ -20,9 +20,9 @@ export const corsProxyApi = axios.create({
  */
 export async function initializeConfig(): Promise<void> {
   try {
-      corsProxyApi.defaults.baseURL = defaultBaseUrl ? `${defaultBaseUrl}/cors-proxy` : "/cors-proxy";
-      console.log(`[Config] Dynamically configured API base URL to: "${defaultBaseUrl}"`);
-      return;
+    corsProxyApi.defaults.baseURL = defaultBaseUrl ? `${defaultBaseUrl}/cors-proxy` : "/cors-proxy";
+    console.log(`[Config] Dynamically configured API base URL to: "${defaultBaseUrl}"`);
+    return;
   } catch (error: any) {
     console.warn("Failed to load runtime configuration from backend, using fallback:", error.message);
   }
@@ -358,18 +358,18 @@ export const odata2Service = {
 
 export const odata2style = {
   getStyleData: async (
-    params: { StyleId?: number; StyleCode?: string; Name?: string; search?: string; [key: string]: unknown } = {},
+    params: { StyleId?: number; StyleCode?: string; Name?: string; search?: string;[key: string]: unknown } = {},
   ): Promise<unknown> => {
     const token = getStoredToken();
 
     const filterParts = params.search
       ? `(StyleCode eq '${String(params.search).replace(/'/g, "''")}' or Name eq '${String(params.search).replace(/'/g, "''")}')`
       : Object.entries(params)
-          .map(([key, value]) => {
-            const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;
-            return `${key} eq ${formattedValue}`;
-          })
-          .join(" and ");
+        .map(([key, value]) => {
+          const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;
+          return `${key} eq ${formattedValue}`;
+        })
+        .join(" and ");
 
     const queryString = filterParts
       ? `?$filter=IsDeleted eq 0 and ${encodeURIComponent(filterParts)}&$expand=StyleColorways`
@@ -900,31 +900,96 @@ export async function getIdGeneratorDetails(params: {
  * Uploads style image file metadata to PLM document service.
  * Endpoint: POST /api/document/UploadFile/
  */
+/**
+ * Uploads style image file and metadata to PLM document service.
+ * Endpoint: POST {iu}{ti}/FASHIONPLM/documents/api/document/UploadFile/
+ */
 export async function uploadPlmStyleImage(
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown> | FormData,
 ): Promise<any> {
   const token = getStoredToken();
-  const url = "/api/document/UploadFile/";
+  const iu = localStorage.getItem("iu") || "";
+  const ti = localStorage.getItem("ti") || "";
+
+  const endpoint = "FASHIONPLM/documents/api/document/UploadFile/";
+  const targetUrl = buildTargetUrl(endpoint, iu, ti);
+
+  console.log(`[uploadPlmStyleImage] ─── Starting Image Upload ───`);
+  console.log(`[uploadPlmStyleImage] Forwarding via /cors-proxy to: ${targetUrl}`);
+  console.log(`[uploadPlmStyleImage] Has Token: ${Boolean(token)}`);
+
+  const isFormData = typeof FormData !== "undefined" && payload instanceof FormData;
+
   try {
-    const response = await api.post<any>(
-      url,
+    const response = await corsProxyApi.post<any>(
+      endpoint,
       payload,
       {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "x-target-url": targetUrl,
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        },
       },
     );
+    console.log(`[uploadPlmStyleImage] Success Response:`, response.data);
     return response.data;
   } catch (err: any) {
+    console.error(`[uploadPlmStyleImage] Request Failed! Target was: ${targetUrl}`, err);
     if (err.response) {
-      console.log(`[uploadPlmStyleImage] Error status: ${err.response.status}`);
+      console.error(`[uploadPlmStyleImage] Error Status: ${err.response.status}`);
+      console.error(`[uploadPlmStyleImage] Error Response Data:`, JSON.stringify(err.response.data, null, 2));
     }
     throw err;
   }
 }
 
+/**
+ * Saves and assigns uploaded document/image in PLM document service.
+ * Endpoint: POST {iu}{ti}/FASHIONPLM/documents/api/document/Save
+ */
+export async function savePlmDocument(
+  payload: Record<string, unknown>,
+): Promise<any> {
+  const token = getStoredToken();
+  const iu = localStorage.getItem("iu") || "";
+  const ti = localStorage.getItem("ti") || "";
+
+  const endpoint = "FASHIONPLM/documents/api/document/SaveMetadata/";
+  const targetUrl = buildTargetUrl(endpoint, iu, ti);
+
+  console.log(`[savePlmDocument] ─── Starting Document Save ───`);
+  console.log(`[savePlmDocument] Forwarding via /cors-proxy to: ${targetUrl}`);
+  console.log(`[savePlmDocument] Payload:`, JSON.stringify(payload, null, 2));
+
+  try {
+    const response = await corsProxyApi.post<any>(
+      endpoint,
+      payload,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "x-target-url": targetUrl,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    console.log(`[savePlmDocument] Success Response:`, response.data);
+    return response.data;
+  } catch (err: any) {
+    console.error(`[savePlmDocument] Request Failed! Target was: ${targetUrl}`, err);
+    if (err.response) {
+      console.error(`[savePlmDocument] Error Status: ${err.response.status}`);
+      console.error(`[savePlmDocument] Error Response Data:`, JSON.stringify(err.response.data, null, 2));
+    }
+    throw err;
+  }
+}
+
+
 export const odata2material = {
   getMaterialData: async (
-    params: { MaterialId?: number; MaterialCode?: string; MaterialName?: string; search?: string; [key: string]: unknown } = {},
+    params: { MaterialId?: number; MaterialCode?: string; MaterialName?: string; search?: string;[key: string]: unknown } = {},
   ): Promise<unknown> => {
     const token = getStoredToken();
     console.log("[odata2material.getMaterialData] Called with params:", JSON.stringify(params, null, 2));
@@ -932,11 +997,11 @@ export const odata2material = {
     const filterParts = params.search
       ? `(MaterialCode eq '${String(params.search).replace(/'/g, "''")}' or MaterialName eq '${String(params.search).replace(/'/g, "''")}')`
       : Object.entries(params)
-          .map(([key, value]) => {
-            const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;
-            return `${key} eq ${formattedValue}`;
-          })
-          .join(" and ");
+        .map(([key, value]) => {
+          const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;
+          return `${key} eq ${formattedValue}`;
+        })
+        .join(" and ");
 
     const queryString = filterParts
       ? `?$filter=IsDeleted eq 0 and ${encodeURIComponent(filterParts)}&$expand=MaterialColorways`

@@ -24,7 +24,8 @@ export function useProjectLoading({ projectName, navigate, showToast }: UseProje
 
   const fetchProjectData = useCallback(async () => {
     const allProjects = await projectService.getAllProjects();
-    const found = allProjects.find((p) => p.ProjectName === projectName);
+    const cleanTarget = projectName.trim().toLowerCase();
+    const found = allProjects.find((p) => (p.ProjectName || "").trim().toLowerCase() === cleanTarget);
     setProject(found);
 
     if (found?.id) {

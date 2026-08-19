@@ -105,7 +105,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
         />
       )}
 
-      {selectedItem && (
+      {selectedItem && !isLocked && (
         <EditItemModal
           isOpen={!!selectedItem}
           onClose={() => setSelectedItem(null)}
@@ -162,6 +162,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
         isOpen={isAnnotationOpen}
         onClose={closeAnnotation}
         item={annotationItem}
+        projectName={project.ProjectName}
         plmImageUrl={annotationItem ? plmImagesMap[annotationItem.styleMaterialNumber] : null}
         isLoadingPlmImage={annotationItem ? loadingPlmImages[annotationItem.styleMaterialNumber] : false}
         plmImageError={annotationItem ? plmImagesErrors[annotationItem.styleMaterialNumber] : null}
@@ -171,6 +172,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
           }
         }}
         onSave={handleSaveAnnotation}
+        isLocked={isLocked}
       />
 
       {toast && (

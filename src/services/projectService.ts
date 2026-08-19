@@ -16,18 +16,30 @@ export interface BackendProject {
   lastUpdated: string;
 }
 
-const mapBackendToTableType = (p: BackendProject): TableType => ({
+const mapBackendToTableType = (p: any): TableType => ({
   id: p.id,
-  ProjectName: p.projectName || '',
-  BuyerId: p.buyerId ?? undefined,
-  BuyerName: p.buyerName || '',
-  Description: p.description || '',
-  SelectionDate: p.selectionDate ? new Date(p.selectionDate) : new Date(),
-  Items: p.itemsCount || 0,
-  LastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
+  ProjectName: p.projectName || p.ProjectName || '',
+  BuyerId: p.buyerId ?? p.BuyerId ?? undefined,
+  BuyerName: p.buyerName || p.BuyerName || '',
+  Description: p.description || p.Description || '',
+  SelectionDate: p.selectionDate ? new Date(p.selectionDate) : (p.SelectionDate ? new Date(p.SelectionDate) : new Date()),
+  Items: p.itemsCount ?? p.items ?? p.Items ?? 0,
+  LastUpdated: p.lastUpdated ? new Date(p.lastUpdated) : (p.LastUpdated ? new Date(p.LastUpdated) : new Date()),
   Actions: '',
   section: p.section || 'Draft',
-  isLocked: p.isLocked ?? false,
+  isLocked: Boolean(
+    p.isLocked === true ||
+    p.isLocked === 1 ||
+    p.isLocked === '1' ||
+    p.isLock === true ||
+    p.isLock === 1 ||
+    p.isLock === '1' ||
+    p.is_locked === true ||
+    p.is_locked === 1 ||
+    p.is_locked === '1' ||
+    p.IsLocked === true ||
+    p.IsLocked === 1
+  ),
 });
 
 //#region Project Service
@@ -184,13 +196,102 @@ export const projectService = {
 
   lockProject: async (id: number): Promise<TableType> => {
     try {
+      console.log(`[projectService.lockProject] Sending lock request to DB for project ${id}...`);
       const { data } = await api.patch(`/api/projects/${id}/lock`);
-      if (data && data.success && data.data) {
-        return mapBackendToTableType(data.data as BackendProject);
+      console.log(`[projectService.lockProject] Backend lock response:`, data);
+      const projData = data?.data || data?.project;
+      if (projData && (projData.id || projData.projectName)) {
+        return mapBackendToTableType(projData);
+      }
+      if (data && (data.success || data.id)) {
+        return (data.id ? mapBackendToTableType(data) : { id, isLocked: true } as TableType);
       }
       throw new Error(data?.message || 'Failed to lock project');
     } catch (err: unknown) {
+      console.error(`[projectService.lockProject] Error locking project ${id}:`, err);
       throw new Error(getErrorMessage(err), { cause: err });
+    }
+  },
+
+  uploadImageToS3: async (params: {
+    projectName: string;
+    styleName: string;
+    base64Data?: string;
+    file?: File;
+    fileName?: string;
+    itemId?: number;
+  }): Promise<{ key: string; url: string; fileName: string }> => {
+    console.log('[projectService.uploadImageToS3] Initiating image upload with params:', {
+      projectName: params.projectName,
+      styleName: params.styleName,
+      fileName: params.fileName,
+      itemId: params.itemId,
+      hasFile: !!params.file,
+      fileSize: params.file?.size,
+      hasBase64: !!params.base64Data,
+      base64Length: params.base64Data?.length,
+    });
+
+    try {
+      let response;
+      if (params.file) {
+        const formData = new FormData();
+        formData.append('image', params.file);
+        formData.append('projectName', params.projectName);
+        formData.append('styleName', params.styleName);
+        if (params.fileName) formData.append('fileName', params.fileName);
+        if (params.itemId) formData.append('itemId', String(params.itemId));
+
+        console.log('[projectService.uploadImageToS3] Sending multipart/form-data to /api/projects/upload-image');
+        response = await api.post('/api/projects/upload-image', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        console.log('[projectService.uploadImageToS3] Sending JSON payload to /api/projects/upload-image');
+        response = await api.post('/api/projects/upload-image', {
+          projectName: params.projectName,
+          styleName: params.styleName,
+          base64Data: params.base64Data,
+          fileName: params.fileName,
+          itemId: params.itemId,
+        });
+      }
+
+      console.log('[projectService.uploadImageToS3] Backend response received:', response.data);
+
+      if (response.data && response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      throw new Error(response.data?.message || 'Failed to upload image to S3');
+    } catch (err: unknown) {
+      console.error('[projectService.uploadImageToS3] Upload failed:', err);
+      throw new Error(getErrorMessage(err), { cause: err });
+    }
+  },
+
+  deleteImageFromS3: async (urlOrKey: string): Promise<boolean> => {
+    try {
+      console.log(`[projectService.deleteImageFromS3] Requesting deletion of S3 image: ${urlOrKey}`);
+      const { data } = await api.delete('/api/projects/s3-image', {
+        params: { url: urlOrKey },
+      });
+      return data?.success || false;
+    } catch (err: unknown) {
+      console.warn('[projectService.deleteImageFromS3] Failed to delete image from S3:', err);
+      return false;
+    }
+  },
+
+  deleteStyleImagesFromS3: async (projectName: string, styleName: string): Promise<boolean> => {
+    try {
+      console.log(`[projectService.deleteStyleImagesFromS3] Requesting batch deletion for style "${styleName}" in project "${projectName}"`);
+      const { data } = await api.delete('/api/projects/style-images', {
+        params: { projectName, styleName },
+      });
+      return data?.success || false;
+    } catch (err: unknown) {
+      console.warn('[projectService.deleteStyleImagesFromS3] Failed to delete style images from S3:', err);
+      return false;
     }
   },
 

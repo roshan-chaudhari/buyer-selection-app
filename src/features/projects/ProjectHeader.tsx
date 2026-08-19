@@ -32,7 +32,18 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
       {/* Breadcrumb & Top Action */}
       <div className={styles.breadcrumbsRow}>
         <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
-          <span className={styles.breadcrumbLink} onClick={() => onNavigate("/dashboard")}>
+          <span
+            role="link"
+            tabIndex={0}
+            className={styles.breadcrumbLink}
+            onClick={() => onNavigate("/dashboard")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onNavigate("/dashboard");
+              }
+            }}
+          >
             Dashboard
           </span>
           <span className={styles.breadcrumbSeparator}>/</span>

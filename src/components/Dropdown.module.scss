@@ -43,16 +43,21 @@
     min-width: 0;
   }
 
+  &:focus-visible,
   &:focus {
     border-color: var(--color-primary, #0072ED);
-    box-shadow: 0 0 0 0.125rem rgba(0, 114, 237, 0.15);
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 2px var(--color-bg-surface, #ffffff), 0 0 0 4px rgba(0, 114, 237, 0.4) !important;
   }
 
   &.hasError {
     border-color: #ef4444;
 
+    &:focus-visible,
     &:focus {
-      box-shadow: 0 0 0 0.125rem rgba(239, 68, 68, 0.15);
+      outline: 2px solid #ef4444 !important;
+      box-shadow: 0 0 0 2px var(--color-bg-surface, #ffffff), 0 0 0 4px rgba(239, 68, 68, 0.4) !important;
     }
   }
 
@@ -141,6 +146,12 @@
     background-color: var(--color-bg-main, #f3f4f6);
   }
 
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: -2px !important;
+    background-color: var(--color-bg-main, #f3f4f6);
+  }
+
   &.isSelected {
     background-color: var(--color-primary, #0072ED);
     color: #ffffff;
@@ -163,6 +174,11 @@
   height: 0.875rem;
   accent-color: #ffffff;
   flex-shrink: 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
+  }
 }
 
 .errorMessage {
@@ -194,4 +210,11 @@
   &:hover {
     background-color: #005bbd;
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 2px var(--color-bg-surface, #ffffff), 0 0 0 4px rgba(0, 114, 237, 0.45) !important;
+  }
 }
+

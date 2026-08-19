@@ -12,9 +12,37 @@ import { extractODataList } from '../../utils/odata';
 import { toDateInputValue, formatScannedDate } from '../../utils/date';
 import styles from './EditItemModal.module.scss';
 
-// ─── Mapping Helpers ──────────────────────────────────────────────────────────
+const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 
-function getFirstImage(_imgStr: string | null | undefined, plmUrl: string | null): string | null {
+function formatDisplayImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
+    return url;
+  }
+  if (url.includes('/api/projects/proxy-image')) {
+    return url;
+  }
+  if (url.includes('amazonaws.com') || url.includes('buyerapp-image')) {
+    return `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
+function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string | null {
+  if (imgStr) {
+    if (imgStr.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(imgStr);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const first = parsed[0];
+          const val = (typeof first === 'object' ? first.annotated || first.original : first) || '';
+          if (val) return formatDisplayImageUrl(val);
+        }
+      } catch (e) {}
+    } else if (imgStr.startsWith('http') || imgStr.startsWith('data:') || imgStr.startsWith('blob:')) {
+      return formatDisplayImageUrl(imgStr);
+    }
+  }
   return plmUrl || null;
 }
 
@@ -370,6 +398,11 @@ export default function EditItemModal({
                   src={getFirstImage(annotatedImage, plmImageUrl) || ""}
                   alt="Annotation Thumbnail"
                   className={styles.editModalThumbnailImg}
+                  onError={(e) => {
+                    if (plmImageUrl && e.currentTarget.src !== plmImageUrl) {
+                      e.currentTarget.src = plmImageUrl;
+                    }
+                  }}
                 />
               ) : isLoadingPlmImage ? (
                 <div className={styles.thumbnailSpinner} title="Loading Style image from PLM..." />

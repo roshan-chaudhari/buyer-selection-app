@@ -105,3 +105,39 @@ input[type='number']::-webkit-inner-spin-button {
     transform: rotate(360deg);
   }
 }
+
+// ── KEYBOARD FOCUS & TAB ACCESSIBILITY SYSTEM ──────────────────────────────────
+// Ensures any interactive element reached via Tab key has a prominent, theme-consistent focus indicator
+
+:focus-visible {
+  outline: 2px solid var(--color-primary, #0072ED) !important;
+  outline-offset: 2px !important;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="combobox"]:focus-visible,
+[role="option"]:focus-visible,
+[role="link"]:focus-visible,
+a:focus-visible,
+[tabindex="0"]:focus-visible {
+  outline: 2px solid var(--color-primary, #0072ED) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px var(--color-bg-surface, #ffffff), 0 0 0 4px rgba(0, 114, 237, 0.4) !important;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--color-primary, #0072ED) !important;
+  outline: 2px solid var(--color-primary, #0072ED) !important;
+  outline-offset: 1px !important;
+  box-shadow: 0 0 0 3px rgba(0, 114, 237, 0.25) !important;
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--color-primary, #0072ED) !important;
+  outline-offset: 2px !important;
+  box-shadow: none !important;
+}

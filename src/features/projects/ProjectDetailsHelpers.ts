@@ -41,12 +41,19 @@ export function groupItemsByStyle(items: ProjectItem[]): GroupedStyle[] {
   }
 
   return Object.entries(groups).map(([styleMaterialNumber, styleItems]) => {
-    const first = styleItems[0];
+    const first = styleItems[0] || {} as ProjectItem;
+    const validAnnotated = styleItems.find((it) => {
+      if (!it.annotatedImage) return false;
+      const str = String(it.annotatedImage).trim();
+      if (str === "" || str === "[]" || str === "null" || str === "undefined") return false;
+      return true;
+    });
+
     return {
       styleMaterialNumber,
       styleMaterialName: first.styleMaterialName || "",
       itemType: first.itemType || 'Style',
-      annotatedImage: styleItems.find((it) => it.annotatedImage)?.annotatedImage ?? first.annotatedImage,
+      annotatedImage: validAnnotated ? validAnnotated.annotatedImage : (first.annotatedImage || null),
       selectionCondition: first.selectionCondition || "As-Is",
       items: styleItems,
     };

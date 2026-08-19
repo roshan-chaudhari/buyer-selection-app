@@ -28,10 +28,17 @@
 .breadcrumbLink {
   cursor: pointer;
   transition: color 0.2s ease;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
 
   &:hover {
     color: var(--color-primary, #0072ED);
     text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
   }
 }
 
@@ -561,6 +568,16 @@
       opacity: 1;
     }
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0072ED) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 2px var(--color-bg-surface, #ffffff), 0 0 0 4px rgba(0, 114, 237, 0.45) !important;
+
+    .thumbnailOverlay {
+      opacity: 1;
+    }
+  }
 }
 
 .thumbnailImg {
@@ -807,16 +824,26 @@
 
 .inlineDateInput {
   background-color: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
   color: var(--color-text-main, #1f2937);
   font-size: 0.8125rem;
   font-family: inherit;
   font-weight: 600;
-  padding: 0;
+  padding: 0.25rem 0.375rem;
   outline: none;
   width: 100%;
   cursor: pointer;
   position: relative;
+  transition: all 0.15s ease;
+
+  &:focus-visible,
+  &:focus {
+    border-color: var(--color-primary, #0072ED) !important;
+    background-color: var(--color-bg-surface, #ffffff) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(0, 114, 237, 0.35) !important;
+  }
 
   &:not(:focus) {
     color: transparent !important;
@@ -832,7 +859,7 @@
     &::before {
       content: attr(data-date);
       position: absolute;
-      left: 0;
+      left: 0.375rem;
       top: 50%;
       transform: translateY(-50%);
       color: var(--color-text-main, #1f2937) !important;
@@ -870,7 +897,7 @@
       &::before {
         content: attr(data-date);
         position: absolute;
-        left: 0;
+        left: 0.375rem;
         top: 50%;
         transform: translateY(-50%);
         color: var(--color-text-main, #1f2937) !important;
@@ -901,13 +928,23 @@
 
 .inlineCommentInput {
   background-color: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
   color: var(--color-text-main, #1f2937);
   font-size: 0.8125rem;
   font-family: inherit;
-  padding: 0;
+  padding: 0.25rem 0.375rem;
   width: 100%;
   outline: none;
+  transition: all 0.15s ease;
+
+  &:focus-visible,
+  &:focus {
+    border-color: var(--color-primary, #0072ED) !important;
+    background-color: var(--color-bg-surface, #ffffff) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(0, 114, 237, 0.35) !important;
+  }
 
   &::placeholder {
     color: var(--color-text-secondary, #9ca3af);

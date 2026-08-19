@@ -9,7 +9,8 @@ import {
   fetchPlmColorwayDetails,
   setSyncInProgress,
   fetchCurrentUser,
-  // uploadPlmStyleImage,
+  uploadPlmStyleImage,
+  savePlmDocument,
 } from "../../services/api";
 import { materialSyncService } from "../../services/sync/material/materialSync.service";
 import { styleOverviewService } from "../../services/sync/style/styleOverview.service";
@@ -21,7 +22,7 @@ import {
   buildSaveColorwayPayload,
   savePlmStyleColorways,
 } from "../../services/plmupdatestylecolordetails";
-import type { ProjectItem } from "../../services/projectService";
+import { projectService, type ProjectItem } from "../../services/projectService";
 import { extractODataList } from "../../utils/odata";
 import type { InforUser } from "../../types/api";
 import type { TableType } from "../../types/table";
@@ -119,97 +120,158 @@ function matchColorways(
   return matched;
 }
 
-/*
-async function _updateLocalItems(
-  groupItems: ProjectItem[],
-  matchedColorways: { plmColorway: any; projItem: ProjectItem }[],
-  newStyleId: number | string,
-  newStyleCode: string,
-  newStyleName: string,
-): Promise<void> {
-  for (const projItem of groupItems) {
-    if (!projItem.id) continue;
+function extractAllImageRefs(group: GroupedStyle, firstItem?: ProjectItem): string[] {
+  const images: string[] = [];
+  const seen = new Set<string>();
 
-    const matchInfo = matchedColorways.find(
-      (mc) => mc.projItem.id === projItem.id,
-    );
-    const plmCol = matchInfo?.plmColorway;
-
-    const finalStyleId = Number(newStyleId);
-    let finalColorId = projItem.colorId ?? 0;
-    let finalColorStatusId = projItem.colorStatusId ?? 0;
-
-    if (plmCol) {
-      const styleColorwayId = Number(
-        plmCol.StyleColorwayId ?? plmCol.StyleColorwayID ?? plmCol.id,
-      );
-      finalColorId = styleColorwayId;
-      finalColorStatusId = Number(projItem.colorStatusId ?? plmCol.Status ?? 1);
+  function addIfValid(url: unknown) {
+    if (!url) return;
+    let str = String(url).trim();
+    if (str === "" || str === "null" || str === "undefined" || str === "[]" || str === "{}") {
+      return;
+    }
+    // Handle double stringification
+    if (str.startsWith('"') && str.endsWith('"')) {
+      try {
+        str = JSON.parse(str);
+      } catch { }
     }
 
-    console.log(
-      `[useProjectSync] Updating local db for item ${projItem.id} -> StyleId: ${finalStyleId}, StyleCode: ${newStyleCode}, ColorId: ${finalColorId}`,
-    );
+    if (str.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) {
+          for (const it of parsed) {
+            if (!it) continue;
+            if (typeof it === 'string' && it.trim()) {
+              addIfValid(it.trim());
+            } else if (typeof it === 'object') {
+              const val = (it as any).annotated || (it as any).original || (it as any).url || (it as any).src;
+              if (val && typeof val === 'string' && val.trim()) {
+                addIfValid(val.trim());
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[useProjectSync] Failed to parse annotatedImage JSON array:", e);
+      }
+      return;
+    }
 
-    await projectService.updateProjectItem(projItem.id, {
-      styleId: finalStyleId,
-      colorId: finalColorId,
-      colorStatusId: finalColorStatusId,
-      styleMaterialNumber: newStyleCode,
-      styleMaterialName: newStyleName,
-      colorway: projItem.colorway,
-      colorwayStatus: projItem.colorwayStatus,
-      selectionCondition: projItem.selectionCondition || "As-Is",
-      sampleDue: projItem.sampleDue,
-      buyerComments: projItem.buyerComments || "",
-      internalComments: projItem.internalComments || "",
-      annotatedImage: projItem.annotatedImage || null,
-    });
+    if (str.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(str);
+        const val = parsed.annotated || parsed.original || parsed.url || parsed.src;
+        if (val && typeof val === 'string' && val.trim()) {
+          addIfValid(val.trim());
+        }
+      } catch { }
+      return;
+    }
+
+    if (
+      !seen.has(str) &&
+      (str.includes('amazonaws.com') ||
+        str.includes('buyerapp-image') ||
+        str.startsWith('data:') ||
+        str.startsWith('blob:') ||
+        str.startsWith('http'))
+    ) {
+      seen.add(str);
+      images.push(str);
+    }
   }
+
+  if (group) {
+    addIfValid(group.annotatedImage);
+  }
+  if (firstItem) {
+    addIfValid(firstItem.annotatedImage);
+  }
+  for (const it of group?.items || []) {
+    addIfValid(it.annotatedImage);
+  }
+
+  return images;
 }
 
-function _dataURLtoBlob(dataurl: string): Blob {
-  const arr = dataurl.split(',');
-  const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
+function extractImageFileName(imageRef: string, fallbackName?: string): string {
+  if (!imageRef) return `${fallbackName || 'style'}.jpg`;
+
+  let target = String(imageRef).trim();
+
+  // 1. If it's a proxy URL, extract the real inner S3 URL
+  if (target.includes('url=')) {
+    try {
+      const parsedUrl = new URL(target, 'http://localhost');
+      const inner = parsedUrl.searchParams.get('url');
+      if (inner) {
+        target = decodeURIComponent(inner).trim();
+      }
+    } catch { }
   }
-  return new Blob([u8arr], { type: mime });
+
+  // 2. Strip any query parameters or hash (e.g. S3 presigned params ?X-Amz-...) and extract filename
+  try {
+    const urlObj = new URL(target, 'http://localhost');
+    const pathname = urlObj.pathname;
+    const lastSlashIdx = pathname.lastIndexOf('/');
+    if (lastSlashIdx !== -1) {
+      const extracted = pathname.substring(lastSlashIdx + 1);
+      if (extracted && extracted.includes('.')) {
+        return decodeURIComponent(extracted);
+      }
+    }
+  } catch { }
+
+  // 3. Extract pure filename directly from path without any alterations
+  const cleanTarget = target.split('?')[0].split('#')[0];
+  const lastSlash = Math.max(cleanTarget.lastIndexOf('/'), cleanTarget.lastIndexOf('\\'));
+  const rawFileName = lastSlash !== -1 ? cleanTarget.substring(lastSlash + 1) : cleanTarget;
+
+  if (rawFileName && rawFileName.includes('.')) {
+    return decodeURIComponent(rawFileName);
+  }
+
+  return `${fallbackName || 'style'}.jpg`;
 }
-*/
 
-// function getBase64Image(annotatedImage: string | null | undefined): string | null {
-//   if (!annotatedImage) return null;
-//   if (annotatedImage.startsWith('[')) {
-//     try {
-//       const parsed = JSON.parse(annotatedImage);
-//       if (Array.isArray(parsed) && parsed.length > 0) {
-//         const item = parsed[0];
-//         if (item && typeof item === 'object') {
-//           return item.annotated || item.original || '';
-//         }
-//         return String(item);
-//       }
-//     } catch {
-//       console.log("[useProjectSync] Failed to parse annotated image");
-//     }
-//   }
-//   return annotatedImage;
-// }
+export function generateUUID(): string {
+  const globalCrypto: Crypto | undefined =
+    typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
 
-// function generateUUID(): string {
-//   if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
-//     return window.crypto.randomUUID();
-//   }
-//   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-//     const r = (Math.random() * 16) | 0;
-//     const v = c === "x" ? r : (r & 0x3) | 0x8;
-//     return v.toString(16);
-//   });
-// }
+  // 1. Native, spec-guaranteed v4 UUID.
+  if (globalCrypto?.randomUUID) {
+    return globalCrypto.randomUUID();
+  }
+
+  // 2. Cryptographically secure random bytes, assembled by hand.
+  if (globalCrypto?.getRandomValues) {
+    const bytes = globalCrypto.getRandomValues(new Uint8Array(16));
+
+    // Per RFC 4122 §4.4: set version (4) and variant (10xx) bits.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
+    return [
+      hex.slice(0, 4).join(""),
+      hex.slice(4, 6).join(""),
+      hex.slice(6, 8).join(""),
+      hex.slice(8, 10).join(""),
+      hex.slice(10, 16).join(""),
+    ].join("-");
+  }
+
+  // 3. Math.random fallback — not cryptographically secure.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 
 async function processStyleGroup(
   group: GroupedStyle,
@@ -317,89 +379,175 @@ async function processStyleGroup(
     `[useProjectSync] Found new style: "${newStyleCode}" with StyleId ${newStyleId}`,
   );
 
- 
 
-  // 5.1 add image in new style 
-  // console.log("[useProjectSync] group.annotatedImage:", group.annotatedImage, "firstItem.annotatedImage:", firstItem.annotatedImage);
-  // const base64Str = getBase64Image(group.annotatedImage || firstItem.annotatedImage);
-  // if (base64Str) {
-  //   let objectFilePath = "";
-  //   let originalObjectName = "style_image.jpg";
+  async function resolveImageBlob(imgRef: string): Promise<Blob | null> {
+    if (!imgRef) return null;
 
-  //   const iu = localStorage.getItem("iu") || "";
-  //   const cleanIu = iu.trim().endsWith("/") ? iu.trim() : `${iu.trim()}/`;
-  //   const uploadImageUrl = cleanIu;
-  //   console.log("[useProjectSync] Raw iu from localStorage:", iu);
-  //   console.log("[useProjectSync] uploadImageUrl:", uploadImageUrl);
+    if (imgRef.startsWith("data:")) {
+      try {
+        const res = await fetch(imgRef);
+        return await res.blob();
+      } catch {
+        return null;
+      }
+    }
 
-  //   let sanitizedUrl = uploadImageUrl;
-  //   if (sanitizedUrl.startsWith("https:https://")) {
-  //     sanitizedUrl = sanitizedUrl.replace("https:https://", "https://");
-  //   } else if (sanitizedUrl.startsWith("http:http://")) {
-  //     sanitizedUrl = sanitizedUrl.replace("http:http://", "http://");
-  //   }
-  //   console.log("[useProjectSync] sanitizedUrl:", sanitizedUrl);
+    try {
+      const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const proxyUrl = imgRef.includes("/api/projects/proxy-image")
+        ? imgRef
+        : `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(imgRef)}`;
 
-  //   const objGuid = generateUUID();
-  //   objectFilePath = `blob:${sanitizedUrl}${objGuid}`;
+      const res = await fetch(proxyUrl);
+      if (res.ok) {
+        return await res.blob();
+      }
+    } catch (err) {
+      console.warn("[useProjectSync] Failed to fetch image via proxy, trying direct fetch:", err);
+    }
 
-  //   let rawBase64: string | null = null;
-  //   if (base64Str.startsWith("data:")) {
-  //     try {
-  //       rawBase64 = base64Str.split(",")[1] || null;
-  //       const mime = base64Str.match(/:(.*?);/)?.[1] || "image/jpeg";
-  //       const ext = mime.split("/")[1] || "jpg";
-  //       originalObjectName = `${newStyleName}.${ext}`;
-  //     } catch {
-  //       console.error("[useProjectSync] Failed to parse dataURL mime type");
-  //     }
-  //   } else {
-  //     rawBase64 = base64Str;
-  //     const nameMatch = base64Str.match(/\/([^\/?#]+)$/);
-  //     if (nameMatch) {
-  //       originalObjectName = nameMatch[1];
-  //     }
-  //   }
+    try {
+      const directRes = await fetch(imgRef);
+      if (directRes.ok) {
+        return await directRes.blob();
+      }
+    } catch (err) {
+      console.error("[useProjectSync] Direct fetch failed for image:", err);
+    }
 
-  //   if (objectFilePath) {
-  //     const uploadPayload = {
-  //       objectFilePath,
-  //       objectExtension: null,
-  //       sequence: 0,
-  //       details: {
-  //         name: null,
-  //         note: null,
-  //         dlType: 11,
-  //         type: "styleImages"
-  //       },
-  //       referenceId: Number(newStyleId),
-  //       modifyDate: "0001-01-01T00:00:00",
-  //       code: "E0012",
-  //       isDefault: false,
-  //       objectId: 0,
-  //       originalObjectName,
-  //       objectStream: null,
-  //       tempId: generateUUID()
-  //     };
+    return null;
+  }
 
-  //     console.log("[useProjectSync] Uploading style image with payload:", JSON.stringify(uploadPayload, null, 2));
+  // 5.1 add images in new style from S3 / annotated image (upload all images for this style)
+  const imageRefs = extractAllImageRefs(group, firstItem);
 
-  //     try {
-  //       // const uploadResponse = await uploadPlmStyleImage(uploadPayload);
-  //       // console.log("[useProjectSync] Upload image response:", JSON.stringify(uploadResponse, null, 2));
-  //       // const objectKey = uploadResponse?.objectKey ?? uploadResponse?.data?.objectKey;
-  //       // console.log(`[useProjectSync] Successfully uploaded image, got objectKey: ${objectKey}`);
-  //     } catch (uploadErr: any) {
-  //       console.error("[useProjectSync] Failed to upload style image to PLM:", uploadErr);
-  //       if (uploadErr.response) {
-  //         console.log("[useProjectSync] Upload error response status:", uploadErr.response.status);
-  //         console.log("[useProjectSync] Upload error response data:", JSON.stringify(uploadErr.response.data, null, 2));
-  //       }
-  //     }
-  //   }
-  // } else {
-  //   console.log("[useProjectSync] No annotated image found for style copy. Skipping image upload.");
-  // }
+  if (imageRefs.length > 0) {
+    console.log(`[useProjectSync] Found ${imageRefs.length} style image(s) for StyleId ${newStyleId} ("${newStyleCode}"). Preparing upload...`);
+
+    for (let imgIdx = 0; imgIdx < imageRefs.length; imgIdx++) {
+      const imgRef = imageRefs[imgIdx];
+      console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Preparing style image upload for StyleId ${newStyleId} from: ${imgRef}`);
+      try {
+        // 1. Fetch image binary blob from S3
+        const imgBlob = await resolveImageBlob(imgRef);
+        if (!imgBlob) {
+          throw new Error(`Could not fetch image binary data from: ${imgRef}`);
+        }
+
+        // 2. Build metadata attachment object
+        const objGuid = generateUUID();
+        const rawBaseUrl =
+          import.meta.env.VITE_PLM_BASE_URL ||
+          localStorage.getItem("iu") ||
+          "https://prd-euc1.fplm.eu1.inforcloudsuite.com/";
+        const baseUrl = rawBaseUrl.endsWith("/") ? rawBaseUrl : `${rawBaseUrl}/`;
+        const objectFilePath = `blob:${baseUrl}${objGuid}`;
+        const originalObjectName = extractImageFileName(imgRef, `${group.styleMaterialNumber || newStyleCode}_${imgIdx + 1}`);
+
+        const atta = {
+          objectFilePath,
+          objectExtension: null,
+          sequence: imgIdx,
+          details: {
+            name: null,
+            note: null,
+            dlType: 11,
+            type: "styleImages"
+          },
+          referenceId: Number(newStyleId),
+          modifyDate: "0001-01-01T00:00:00",
+          code: "E0012",
+          isDefault: false,
+          objectId: 0,
+          originalObjectName,
+          objectStream: null,
+          tempId: generateUUID()
+        };
+
+        // 3. Build Multipart FormData matching Infor PLM specifications
+        const formData = new FormData();
+        formData.append("file", imgBlob, originalObjectName);
+        formData.append("atta", JSON.stringify(atta));
+        formData.append("type", "styleImages");
+        formData.append("formType", "file");
+        formData.append("schema", currentUser.activeSchema || "FSH4");
+        formData.append("overwrite", "false");
+
+        console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Uploading style image to PLM for style "${newStyleCode}" with StyleId ${newStyleId}...`);
+        console.log(`[useProjectSync] Attachment metadata (atta):`, JSON.stringify(atta, null, 2));
+
+        const uploadResponse = await uploadPlmStyleImage(formData);
+        console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Upload response:`, JSON.stringify(uploadResponse, null, 2));
+
+        // 4. Save and assign uploaded image in style via PLM document save API
+        if (uploadResponse) {
+          const addedFile =
+            (uploadResponse?.addedFiles && uploadResponse.addedFiles[0]) ||
+            (uploadResponse?.AttaFileListDto && uploadResponse.AttaFileListDto[0]?.addedFiles && uploadResponse.AttaFileListDto[0].addedFiles[0]) ||
+            (Array.isArray(uploadResponse) && uploadResponse[0]?.addedFiles && uploadResponse[0].addedFiles[0]) ||
+            (Array.isArray(uploadResponse) && uploadResponse[0]) ||
+            null;
+
+          const thumbUrl = addedFile?.thumbUrl || uploadResponse?.thumbUrl || null;
+          const customUrl = addedFile?.customUrl || uploadResponse?.customUrl || null;
+          const objectKey = addedFile?.objectKey || originalObjectName;
+          const oldFileName = addedFile?.oldFileName || originalObjectName;
+
+          const saveDocumentPayload = {
+            AttaFileListDto: [
+              {
+                objectFilePath: atta.objectFilePath,
+                objectExtension: atta.objectExtension ?? null,
+                sequence: atta.sequence ?? 0,
+                details: {
+                  name: atta.details?.name ?? null,
+                  note: atta.details?.note ?? null,
+                  dlType: atta.details?.dlType ?? 11,
+                  type: atta.details?.type ?? "styleImages",
+                },
+                referenceId: Number(newStyleId),
+                modifyDate: atta.modifyDate || "0001-01-01T00:00:00",
+                code: atta.code || "E0012",
+                isDefault: atta.isDefault ?? false,
+                objectId: atta.objectId ?? 0,
+                originalObjectName,
+                objectStream: atta.objectStream ?? null,
+                tempId: atta.tempId,
+                objectKey,
+                oldFileName,
+                documentUrl: addedFile?.documentUrl ?? null,
+                thumbUrl,
+                customUrl,
+                type: "styleImages",
+              },
+            ],
+            Schema: uploadResponse?.Schema || currentUser.activeSchema || "FSH4",
+          };
+
+          console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Saving and assigning style image for StyleId ${newStyleId} (StyleCode: "${newStyleCode}")...`);
+          console.log(`[useProjectSync] Document Save Payload:`, JSON.stringify(saveDocumentPayload, null, 2));
+
+          const saveDocResponse = await savePlmDocument(saveDocumentPayload);
+          console.log(`[useProjectSync] [Image ${imgIdx + 1}/${imageRefs.length}] Document save response:`, JSON.stringify(saveDocResponse, null, 2));
+        }
+      } catch (uploadErr: any) {
+        console.error(`[useProjectSync] Failed to upload/assign style image ${imgIdx + 1}/${imageRefs.length} to PLM for style "${newStyleCode}":`, uploadErr);
+        if (uploadErr.response) {
+          console.log("[useProjectSync] Upload error response status:", uploadErr.response.status);
+          console.log("[useProjectSync] Upload error response data:", JSON.stringify(uploadErr.response.data, null, 2));
+        }
+      }
+    }
+  } else {
+    console.log(`[useProjectSync] No annotated images found for style "${newStyleCode}". Skipping image upload.`);
+  }
+
+  //5.2 add image in new style from document library.
+
+
+
+
+
 
   // 6. Fetch full details of the newly created style
   const newStyleDetails = await fetchPlmColorwayDetails(
@@ -454,7 +602,7 @@ async function processStyleGroup(
 
 
 
-  
+
 
   // 8. Update local database with new style and colorway details
   // console.log(
@@ -642,25 +790,22 @@ export function useProjectSync({
             console.error("[useProjectSync] PLM Project save did not return key or rowVersionText.");
           }
         } catch (projErr: any) {
-          console.error("[useProjectSync] Step 0: Failed to create project or add styles in PLM:", projErr);
+          console.error("[useProjectSync] Step 0: Failed to create project container or add styles in PLM:", projErr);
           const errData = projErr?.response?.data;
           const hasConflict = checkBrokenRules(errData) || checkBrokenRules(errData?.data);
           if (hasConflict) {
-            throw new Error("PROJECT.CODE_ALREADY_EXISTS", { cause: projErr });
+            console.warn("[useProjectSync] PLM Project code already exists in PLM. Styles have been synced. Proceeding to finalize and lock project in DB.");
+          } else {
+            console.warn("[useProjectSync] Non-fatal PLM Project container save warning:", projErr);
           }
-          throw projErr;
         }
       }
 
-      // Lock the project so it becomes read-only for all users
-      // try {
-      //   const lockedProject = await projectService.lockProject(project.id);
-      //   setProject(lockedProject);
-      // } catch (lockErr) {
-      //   console.error('[useProjectSync] Failed to lock project after sync:', lockErr);
-      //   // Non-fatal: sync succeeded; optimistically update local state
-      //   setProject((prev) => (prev ? { ...prev, isLocked: true } : prev));
-      // }
+      // Lock the project in the database so it becomes read-only for all users
+      console.log(`[useProjectSync] Updating database lock status (IsLock = 1) for project ID ${project.id}...`);
+      const lockedProject = await projectService.lockProject(project.id);
+      setProject(lockedProject);
+      console.log(`[useProjectSync] Project ${project.id} locked in database successfully:`, lockedProject);
 
       showToast(
         `Project synchronized — ${totalStyles} style(s), ${totalColorways} colorway(s) loaded.`,

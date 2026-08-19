@@ -50,8 +50,41 @@ function buildColorwayOptions(
   };
 }
 
-function getFirstImage(_imgStr: string | null | undefined, plmUrl: string | null): string {
-  return plmUrl || DEFAULT_GARMENT_SVG;
+const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+
+function formatDisplayImageUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
+    return url;
+  }
+  if (url.includes('/api/projects/proxy-image')) {
+    return url;
+  }
+  if (url.includes('amazonaws.com') || url.includes('buyerapp-image')) {
+    return `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
+function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string {
+  if (plmUrl) {
+    return formatDisplayImageUrl(plmUrl);
+  }
+  if (imgStr) {
+    if (imgStr.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(imgStr);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const first = parsed[0];
+          const val = (typeof first === 'object' ? first.annotated || first.original : first) || '';
+          if (val) return formatDisplayImageUrl(val);
+        }
+      } catch (e) { }
+    } else if (imgStr.startsWith('http') || imgStr.startsWith('data:') || imgStr.startsWith('blob:')) {
+      return formatDisplayImageUrl(imgStr);
+    }
+  }
+  return DEFAULT_GARMENT_SVG;
 }
 
 export function useProjectColumns({
@@ -69,22 +102,41 @@ export function useProjectColumns({
       header: "Image",
       width: "60px",
       render: (row) => {
-        const targetImage = getFirstImage(row.annotatedImage, plmImagesMap[row.styleMaterialNumber]);
+        const plmUrl = plmImagesMap[row.styleMaterialNumber] || null;
+        const targetImage = getFirstImage(row.annotatedImage, plmUrl);
         const hasRealImage = !!(targetImage && targetImage !== DEFAULT_GARMENT_SVG);
         return (
           <div
+            role="button"
+            tabIndex={0}
             className={styles.thumbnailCell}
             onClick={(e) => {
               e.stopPropagation();
               if (row.items.length > 0) onAnnotationOpen(row.items[0]);
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (row.items.length > 0) onAnnotationOpen(row.items[0]);
+              }
+            }}
             title="Click to view and annotate style"
+            aria-label={`View and annotate style ${row.styleMaterialNumber || ""}`}
           >
             <img
               src={targetImage}
               alt={hasRealImage ? row.styleMaterialNumber : "Garment Sketch"}
               className={styles.thumbnailImg}
               style={hasRealImage ? undefined : { opacity: 0.7 }}
+              onError={(e) => {
+                const fallback = getFirstImage(row.annotatedImage, null) || DEFAULT_GARMENT_SVG;
+                if (e.currentTarget.src !== fallback) {
+                  e.currentTarget.src = fallback;
+                } else if (e.currentTarget.src !== DEFAULT_GARMENT_SVG) {
+                  e.currentTarget.src = DEFAULT_GARMENT_SVG;
+                }
+              }}
             />
           </div>
         );
@@ -107,7 +159,7 @@ export function useProjectColumns({
       render: (row) => (
         <span className={styles.truncateText} title={row.styleMaterialName ?? ""}>
           {row.styleMaterialName || "-"}
-          </span>
+        </span>
       ),
     },
     {
