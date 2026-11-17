@@ -104,9 +104,9 @@ export default function EditItemModal({
 
   // ── Form state ──────────────────────────────────────────────────────────────
   const [styleId, setStyleId] = useState(item.styleId ?? 0);
-  const [colorId, setColorId] = useState(item.colorId ?? 0);
+  const [colorId] = useState(item.colorId ?? 0);
   const [styleName, setStyleName] = useState(item.styleMaterialName ?? '');
-  const [colorway, setColorway] = useState(item.colorway ?? '');
+  const [colorway] = useState(item.colorway ?? '');
   const [colorwayStatus, setColorwayStatus] = useState(item.colorwayStatus ?? 'Pending');
   const [colorStatusId, setColorStatusId] = useState(item.colorStatusId ?? 0);
   const [selectionCondition, setSelectionCondition] = useState(item.selectionCondition ?? 'As-Is');
@@ -120,12 +120,12 @@ export default function EditItemModal({
   const [colorwayOptions, setColorwayOptions] = useState<ColorwayOption[]>(() =>
     fallbackColorwayOption(item.colorway, item.colorId ?? 0)
   );
-  const [isLoadingColorways, setIsLoadingColorways] = useState(false);
+  const [, setIsLoadingColorways] = useState(false); // value unused while Colorways field is commented out
 
-  const [statusOptions, setStatusOptions] = useState<LookupOption[]>(() =>
+  const [, setStatusOptions] = useState<LookupOption[]>(() =>
     item.colorwayStatus ? [{ value: item.colorwayStatus, label: item.colorwayStatus, id: item.colorStatusId ?? 0 }] : []
   );
-  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+  const [, setIsLoadingStatus] = useState(false); // value unused while Colorway Status field is commented out
 
   // ── Fetch colorways on open ─────────────────────────────────────────────────
   useEffect(() => {
@@ -211,22 +211,22 @@ export default function EditItemModal({
     loadStatusOptions();
   }, [isOpen, item.colorStatusId, item.colorwayStatus]);
 
-  // ── Colorway selection handler ──────────────────────────────────────────────
-  const handleColorwayChange = (e: { target: { value: string } }) => {
-    const selected = e.target.value;
-    setColorway(selected);
-    const firstVal = selected.split(',')[0]?.trim();
-    const match = colorwayOptions.find((opt) => opt.value === firstVal);
-    setColorId(match?.colorwayId ?? 0);
-  };
-
-  // ── Status selection handler ──────────────────────────────────────────────
-  const handleStatusChange = (e: { target: { value: string } }) => {
-    const selected = e.target.value;
-    setColorwayStatus(selected);
-    const match = statusOptions.find((opt) => opt.value === selected);
-    setColorStatusId(match?.id ?? 0);
-  };
+  // ── Colorway / Status selection handlers ────────────────────────────────────
+  // Commented out together with the Colorways / Colorway Status fields.
+  // const handleColorwayChange = (e: { target: { value: string } }) => {
+  //   const selected = e.target.value;
+  //   setColorway(selected);
+  //   const firstVal = selected.split(',')[0]?.trim();
+  //   const match = colorwayOptions.find((opt) => opt.value === firstVal);
+  //   setColorId(match?.colorwayId ?? 0);
+  // };
+  //
+  // const handleStatusChange = (e: { target: { value: string } }) => {
+  //   const selected = e.target.value;
+  //   setColorwayStatus(selected);
+  //   const match = statusOptions.find((opt) => opt.value === selected);
+  //   setColorStatusId(match?.id ?? 0);
+  // };
 
   // ── Save handler ────────────────────────────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
