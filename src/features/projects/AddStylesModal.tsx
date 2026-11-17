@@ -4,6 +4,8 @@ import { Plus, Camera, QrCode, AlertCircle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 import Input from "../../components/Input";
+import ConfirmModal from "../../components/ConfirmModal";
+import EditItemModal from "./EditItemModal";
 import {
   projectService,
   type ProjectItem,
@@ -22,6 +24,34 @@ interface AddStylesModalProps {
   onError?: (message: string) => void;
 }
 
+interface ParsedQrInfo {
+  styleNumber: string;
+  colorCode?: string;
+}
+
+function parseQrData(raw: string): ParsedQrInfo {
+  const trimmed = raw.trim();
+
+  // Match Style Number or Style Code
+  const styleMatch = trimmed.match(/Style\s*(?:Number|Code)\s*:\s*([^,;\n\r]+)/i);
+  let styleNumber = styleMatch ? styleMatch[1].trim() : "";
+
+  // If no prefix, extract the first segment before comma/semicolon/newline
+  if (!styleNumber) {
+    const parts = trimmed.split(/[,;\n\r]+/);
+    styleNumber = parts[0].trim();
+  }
+
+  // Match Color, Color Code, Colorway, or Colorway Code
+  const colorMatch = trimmed.match(/Color(?:way)?\s*(?:Code)?\s*:\s*([^,;\n\r]+)/i);
+  const colorCode = colorMatch ? colorMatch[1].trim() : undefined;
+
+  return {
+    styleNumber,
+    colorCode: colorCode || undefined,
+  };
+}
+
 export default function AddStylesModal({
   isOpen,
   onClose,
@@ -38,6 +68,12 @@ export default function AddStylesModal({
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
   const [scanError, setScanError] = useState("");
   const [lastScannedItem, setLastScannedItem] = useState<string | null>(null);
+
+  // ── Not-in-PLM confirmation state ───────────────────────────────────────────
+  const [notInPlmPendingCode, setNotInPlmPendingCode] = useState<string | null>(null);
+  const [showNotInPlmConfirm, setShowNotInPlmConfirm] = useState(false);
+  const [isAddingNotInPlm, setIsAddingNotInPlm] = useState(false);
+  const [notInPlmEditItem, setNotInPlmEditItem] = useState<ProjectItem | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -185,28 +221,38 @@ export default function AddStylesModal({
     async (
       code: string,
       skipDuplicateCheck = false,
+      colorCode?: string,
     ): Promise<{ styleObj: any; itemType: "Style" | "Material" }> => {
       if (!skipDuplicateCheck) {
-        // Check for duplicate in current project items
-        const isDuplicateInProject = existingItems?.some(
-          (item) =>
-            item.styleMaterialNumber.toLowerCase() === code.toLowerCase(),
-        );
-        if (isDuplicateInProject) {
-          throw new Error(`Item "${code}" already exists in this project`);
+        if (colorCode) {
+          // If color is provided, check if exact style and colorway already exists in project
+          const isDuplicateInProject = existingItems?.some(
+            (item) =>
+              item.styleMaterialNumber.toLowerCase() === code.toLowerCase() &&
+              item.colorway &&
+              item.colorway.trim().toLowerCase() === colorCode.trim().toLowerCase(),
+          );
+          if (isDuplicateInProject) {
+            throw new Error(`Item "${code}" with color "${colorCode}" already exists in this project`);
+          }
+        } else {
+          // Check for duplicate in current project items (when no colorway specified in QR)
+          const isDuplicateInProject = existingItems?.some(
+            (item) =>
+              item.styleMaterialNumber.toLowerCase() === code.toLowerCase(),
+          );
+          if (isDuplicateInProject) {
+            throw new Error(`Item "${code}" already exists in this project`);
+          }
         }
       }
 
-      // Determine parameter: numeric-only -> ID; alphanumeric -> Code
-      const isNum = code.length > 0 && /^\d+$/.test(code);
+      // Always use `search` so the OData layer can try both StyleCode and StyleId
+      // (the OData filter handles numeric codes without quotes — see api.ts getStyleData).
 
       // 1. Try style lookup
       try {
-        const styleQueryParams = isNum
-          ? { StyleId: Number(code) }
-          : { search: code };
-
-        const response = await odata2style.getStyleData(styleQueryParams);
+        const response = await odata2style.getStyleData({ search: code });
         const styleList = extractODataList<any>(response);
 
         if (styleList.length > 0) {
@@ -221,9 +267,7 @@ export default function AddStylesModal({
 
       // 2. Try material lookup
       try {
-        const materialQueryParams = isNum
-          ? { MaterialId: Number(code) }
-          : { search: code };
+        const materialQueryParams = { search: code };
 
         const response =
           await odata2material.getMaterialData(materialQueryParams);
@@ -252,12 +296,15 @@ export default function AddStylesModal({
 
   /**
    * Maps Infor OData Style/Material metadata to the database schema structure.
+   * If a scanned color is provided, resolves matching colorway from PLM metadata
+   * and automatically marks it as selected.
    */
   const mapODataStyleToItemPayload = useCallback(
     (
       code: string,
       styleObj: any,
       itemType: "Style" | "Material",
+      scannedColor?: string,
     ): Omit<ProjectItem, "id" | "projectId"> => {
       const styleNameStr =
         (styleObj.Name as string) ||
@@ -271,14 +318,54 @@ export default function AddStylesModal({
           ? styleObj.StyleCode || code
           : styleObj.MaterialCode || code;
 
+      // Extract raw colorways from styleObj if available
+      const colorwaysNode =
+        styleObj.StyleColorways ||
+        styleObj.MaterialColorways ||
+        styleObj.MaterialColorway ||
+        [];
+      const rawColorways = extractODataList<any>(colorwaysNode);
+
+      let matchedColorwayName = scannedColor || "";
+      let matchedColorId = 0;
+
+      if (scannedColor && rawColorways.length > 0) {
+        const target = scannedColor.trim().toLowerCase();
+        // Match by Code (e.g. "5001"), Name (e.g. "5001" or "BLACK"), or combined string
+        const match =
+          rawColorways.find((cw: any) => String(cw.Code ?? "").trim().toLowerCase() === target) ||
+          rawColorways.find((cw: any) => String(cw.Name ?? "").trim().toLowerCase() === target) ||
+          rawColorways.find((cw: any) => {
+            const cCode = String(cw.Code ?? "").trim().toLowerCase();
+            const cName = String(cw.Name ?? "").trim().toLowerCase();
+            return (
+              (cCode && target.includes(cCode)) ||
+              (cName && target.includes(cName)) ||
+              (cCode && cCode.includes(target)) ||
+              (cName && cName.includes(target))
+            );
+          });
+
+        if (match) {
+          matchedColorwayName = match.Name || match.Code || scannedColor;
+          matchedColorId =
+            match.StyleColorwayId ??
+            match.MaterialColorwayId ??
+            match.MaterialColorwayID ??
+            match.Id ??
+            match.id ??
+            0;
+        }
+      }
+
       return {
         styleId: Number(styleId),
-        colorId: 0,
+        colorId: matchedColorId,
         styleMaterialNumber: styleMaterialNum,
         styleMaterialName: styleNameStr,
         itemType: itemType,
-        colorway: "",
-        colorwayStatus: "Pending",
+        colorway: matchedColorwayName,
+        colorwayStatus: matchedColorwayName ? "Selected" : "Pending",
         selectionCondition: "As-Is",
         sampleDue: getTodayDateString(),
         buyerComments: "",
@@ -289,45 +376,89 @@ export default function AddStylesModal({
   );
 
   /**
-   * Validates, structures, and adds a Style Number to the project.
+   * Validates, structures, and adds a Style Number & Colorway to the project.
    */
   const manualQrInput = useCallback(
     async (code: string) => {
       if (!project?.id || !code.trim()) return;
 
-      let styleNumber = code.trim();
-      // Parse the QR code response format (e.g. Style Number:WS260041,Style Name:DMAGIC,Brand:Crossline)
-      const match = styleNumber.match(/Style\s+Number\s*:\s*([^,]+)/i);
-      if (match) {
-        styleNumber = match[1].trim();
-      }
+      const { styleNumber, colorCode } = parseQrData(code);
+      if (!styleNumber) return;
 
       setIsAddingStyle(true);
       try {
-        const { styleObj, itemType } = await fetchAndValidateStyle(styleNumber);
+        const { styleObj, itemType } = await fetchAndValidateStyle(
+          styleNumber,
+          false,
+          colorCode,
+        );
+
         const payload = mapODataStyleToItemPayload(
           styleNumber,
           styleObj,
           itemType,
+          colorCode,
         );
-        await projectService.addItemToProject(project.id!, payload);
+
+        // Check if there is an existing row for this style with an empty colorway
+        const existingEmptyRow = existingItems?.find(
+          (it) =>
+            it.styleMaterialNumber.toLowerCase() === styleNumber.toLowerCase() &&
+            (!it.colorway || it.colorway.trim() === ""),
+        );
+
+        // Also check if after PLM color resolution, the resolved colorway is already in existingItems
+        if (payload.colorway) {
+          const isResolvedColorwayDuplicate = existingItems?.some(
+            (it) =>
+              it.styleMaterialNumber.toLowerCase() === styleNumber.toLowerCase() &&
+              it.colorway?.toLowerCase() === payload.colorway.toLowerCase(),
+          );
+          if (isResolvedColorwayDuplicate) {
+            throw new Error(
+              `Item "${styleNumber}" with color "${payload.colorway}" already exists in this project`,
+            );
+          }
+        }
+
+        if (existingEmptyRow && existingEmptyRow.id && payload.colorway) {
+          // Fill the unassigned color row for this style
+          await projectService.updateProjectItem(existingEmptyRow.id, {
+            ...existingEmptyRow,
+            colorway: payload.colorway,
+            colorId: payload.colorId,
+            colorwayStatus: "Selected",
+          });
+        } else {
+          // Add new item to project
+          await projectService.addItemToProject(project.id!, payload);
+        }
 
         const allProjects = await projectService.getAllProjects();
         const updated = allProjects.find((p) => p.id === project.id);
         if (updated) onAddStyles(updated);
         onClose();
       } catch (err) {
-        console.error(
-          "[AddStylesModal] Failed to add style via manualQrInput:",
-          err,
-        );
-        onError?.(err instanceof Error ? err.message : "Style not found.");
+        const errMsg = err instanceof Error ? err.message : "Style not found.";
+        // If the item was not found in PLM, offer to add it locally instead
+        if (errMsg.toLowerCase().includes("not found as style or material in plm")) {
+          const { styleNumber: sn } = parseQrData(code);
+          setNotInPlmPendingCode(sn || code.trim());
+          setShowNotInPlmConfirm(true);
+        } else {
+          console.error(
+            "[AddStylesModal] Failed to add style via manualQrInput:",
+            err,
+          );
+          onError?.(errMsg);
+        }
       } finally {
         setIsAddingStyle(false);
       }
     },
     [
       project,
+      existingItems,
       fetchAndValidateStyle,
       mapODataStyleToItemPayload,
       onAddStyles,
@@ -335,6 +466,56 @@ export default function AddStylesModal({
       onError,
     ],
   );
+
+  // ── Not-in-PLM: add item locally then open edit modal ───────────────────────
+  const handleConfirmAddNotInPlm = useCallback(async () => {
+    if (!project?.id || !notInPlmPendingCode) return;
+    setIsAddingNotInPlm(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const payload: Omit<ProjectItem, "id" | "projectId"> = {
+        styleId: 0,
+        colorId: 0,
+        styleMaterialNumber: notInPlmPendingCode,
+        styleMaterialName: notInPlmPendingCode,
+        itemType: "Style",
+        colorway: "",
+        colorwayStatus: "Pending",
+        selectionCondition: "As-Is",
+        sampleDue: today,
+        buyerComments: "",
+        internalComments: "",
+        notInPLM: true,
+        annotatedImage: null,
+      };
+      const added = await projectService.addItemToProject(project.id!, payload);
+      setShowNotInPlmConfirm(false);
+      setNotInPlmPendingCode(null);
+      // Open the edit modal immediately so the user can fill in details
+      setNotInPlmEditItem(added);
+    } catch (err) {
+      console.error("[AddStylesModal] Failed to add not-in-PLM item:", err);
+      onError?.(err instanceof Error ? err.message : "Failed to add item.");
+      setShowNotInPlmConfirm(false);
+      setNotInPlmPendingCode(null);
+    } finally {
+      setIsAddingNotInPlm(false);
+    }
+  }, [project, notInPlmPendingCode, onError]);
+
+  const handleCancelNotInPlm = useCallback(() => {
+    setShowNotInPlmConfirm(false);
+    setNotInPlmPendingCode(null);
+  }, []);
+
+  const handleNotInPlmEditSave = useCallback(async (_updated: ProjectItem) => {
+    setNotInPlmEditItem(null);
+    // Refresh the project list so the parent table reflects the new item
+    const allProjects = await projectService.getAllProjects();
+    const refreshed = allProjects.find((p) => p.id === project.id);
+    if (refreshed) onAddStyles(refreshed);
+    onClose();
+  }, [project, onAddStyles, onClose]);
 
   const handleAddStyle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -497,7 +678,8 @@ export default function AddStylesModal({
   }, [isScanning, isOpen, hasCameraPermission]);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add Styles / Items">
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title="Add Styles / Items">
       <form onSubmit={handleAddStyle} className={styles.editForm}>
         {/* Scan a QR Code Card */}
         <div
@@ -632,5 +814,42 @@ export default function AddStylesModal({
         </div>
       </form>
     </Modal>
+
+    {/* ── Not-in-PLM: confirmation popup ──────────────────────────────────── */}
+    <ConfirmModal
+      isOpen={showNotInPlmConfirm}
+      title="Item Not Found in PLM"
+      message={
+        <>
+          <strong>&ldquo;{notInPlmPendingCode}&rdquo;</strong> was not found in PLM.
+          <br />
+          Do you want to add this item to the project anyway?
+        </>
+      }
+      confirmLabel="Yes, Add to Project"
+      confirmingLabel="Adding…"
+      confirmVariant="primary"
+      isConfirming={isAddingNotInPlm}
+      onConfirm={handleConfirmAddNotInPlm}
+      onCancel={handleCancelNotInPlm}
+    />
+
+    {/* ── Not-in-PLM: edit details popup (opens right after add) ──────────── */}
+    {notInPlmEditItem && (
+      <EditItemModal
+        isOpen={true}
+        onClose={() => {
+          setNotInPlmEditItem(null);
+          onClose();
+        }}
+        item={notInPlmEditItem}
+        onSave={handleNotInPlmEditSave}
+        onError={onError}
+        plmImageUrl={null}
+        isLoadingPlmImage={false}
+        plmImageError={null}
+      />
+    )}
+  </>
   );
 }

@@ -10,6 +10,7 @@ import { useProjectDetails } from "./useProjectDetails";
 import { useProjectColumns } from "./useProjectColumns";
 import { ProjectDetailsModals } from "./ProjectDetailsModals";
 import ConfirmModal from "../../components/ConfirmModal";
+import { useNavigationBlocker } from "../../hooks/useNavigationBlocker";
 import styles from "./ProjectDetailsPage.module.scss";
 
 export default function ProjectDetailsPage({
@@ -17,6 +18,7 @@ export default function ProjectDetailsPage({
   projectName,
   currentUser = null,
 }: ProjectDetailsPageProps) {
+  const { checkAndConfirm } = useNavigationBlocker();
   const details = useProjectDetails({ projectName, navigate, currentUser });
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
@@ -108,14 +110,14 @@ export default function ProjectDetailsPage({
               <Button
                 variant="outline"
                 title="Refresh"
-                onClick={details.handleRefresh}
+                onClick={() => checkAndConfirm(details.handleRefresh)}
                 disabled={details.isLoading || details.isSyncing}
                 icon={<RefreshCw size={14} className={details.isLoading ? styles.spinning : ''} />}
               />
               <Button
                 variant="outline"
                 title="Clear Project"
-                onClick={() => setConfirmClearOpen(true)}
+                onClick={() => checkAndConfirm(() => setConfirmClearOpen(true))}
                 disabled={details.isLocked || details.isSyncing || details.sortedGroupedStyles.length === 0 || details.isLoading}
                 icon={<Trash2 size={14} />}
               />

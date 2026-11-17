@@ -89,6 +89,7 @@ export function usePlmStyleImages({
       const firstItem = group.items[0];
       if (
         firstItem &&
+        !firstItem.notInPLM && // local-only items never exist in PLM
         plmImagesMap[group.styleMaterialNumber] === undefined &&
         globalPlmImagesCache[group.styleMaterialNumber] === undefined &&
         !loadingPlmImages[group.styleMaterialNumber]

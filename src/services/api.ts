@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
@@ -371,6 +371,8 @@ export const odata2style = {
     const queryString = filterParts
       ? `?$filter=IsDeleted eq 0 and ${encodeURIComponent(filterParts)}&$expand=StyleColorways`
       : `?$expand=StyleColorways`;
+
+    console.log(`/api/odata2/Style${queryString}`);
 
     const response = await api.get(`/api/odata2/Style${queryString}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -940,8 +942,14 @@ export const odata2material = {
   ): Promise<unknown> => {
     const token = getStoredToken();
 
+    const materialSearchStr = String(params.search ?? '').trim();
+    const isMaterialNumericSearch = materialSearchStr !== '' && /^\d+$/.test(materialSearchStr);
+
+    // When search is purely numeric, MaterialCode / MaterialId are numeric fields — no quotes.
     const filterParts = params.search
-      ? `(MaterialCode eq '${String(params.search).replace(/'/g, "''")}' or MaterialName eq '${String(params.search).replace(/'/g, "''")}')`
+      ? isMaterialNumericSearch
+        ? `(MaterialCode eq ${materialSearchStr} or MaterialId eq ${materialSearchStr} or MaterialName eq '${materialSearchStr.replace(/'/g, "''")}')`
+        : `(MaterialCode eq '${materialSearchStr.replace(/'/g, "''")}' or MaterialName eq '${materialSearchStr.replace(/'/g, "''")}')`
       : Object.entries(params)
         .map(([key, value]) => {
           const formattedValue = typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : value;

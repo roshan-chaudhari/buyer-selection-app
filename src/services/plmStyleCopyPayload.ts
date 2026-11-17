@@ -29,16 +29,16 @@ export interface PlmStyleCopyRequest {
 
 function buildInfoClusters(styleId: number): string {
   const clusterDefinitions: Array<{ id: number; flag: number }> = [
-    { id: 2,  flag: 1 },
+    { id: 2, flag: 1 },
     { id: 26, flag: 1 },
-    { id: 8,  flag: 1 },
-    { id: 9,  flag: 1 },
+    { id: 8, flag: 1 },
+    { id: 9, flag: 1 },
     { id: 13, flag: 1 },
     { id: 22, flag: 1 },
     { id: 23, flag: 1 },
     { id: 24, flag: 0 },
     { id: 16, flag: 1 },
-    { id: 5,  flag: 1 },
+    { id: 5, flag: 1 },
     { id: 18, flag: 1 },
     { id: 10, flag: 1 },
     { id: 17, flag: 1 },
@@ -101,19 +101,40 @@ export function extractStyleInputFromNode(
   };
 }
 
+/**
+ * Converts a zero-based variant index into an alphabetical suffix letter.
+ * 0 → "A", 1 → "B", …, 25 → "Z", 26 → "AA", 27 → "AB", …
+ */
+function indexToAlphaSuffix(index: number): string {
+  let suffix = "";
+  let n = index;
+  do {
+    suffix = String.fromCharCode(65 + (n % 26)) + suffix;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return suffix;
+}
+
 export async function buildStyleCopyPayload(
-  StyleNumber:string,
+  StyleNumber: string,
   Sequence: number,
   styleInput: PlmStyleNodeInput,
   schema: string,
   userId: number,
+  /** Zero-based variant index used to generate alphabetical suffix (-A, -B, -C …)
+   *  for As-Is and Small Change conditions. Defaults to 0 → "-A". */
+  variantSuffixIndex: number = 0,
 ): Promise<PlmStyleCopyRequest> {
-  const { StyleId, StyleCode, SeasonId, BOMLineMainMaterial} = styleInput;
+  const { StyleId, StyleCode, SeasonId, BOMLineMainMaterial } = styleInput;
 
   const cond = (styleInput.selectionCondition ?? "").toLowerCase().trim();
   const isBigChange = cond.includes("big") && cond.includes("change");
-  const styleNameValue = isBigChange ? "Copy of " : "Variant of ";
   const taskId: "styleCopy" | "styleVariant" = isBigChange ? "styleCopy" : "styleVariant";
+
+  // For As-Is / Small Change: append alphabetical suffix (-A, -B, …) to style name and code.
+  // For Big Change (Copy Of): keep the "Copy of " prefix, no suffix appended.
+  const alphaSuffix = !isBigChange ? `-${indexToAlphaSuffix(variantSuffixIndex)}` : "";
+  const styleNameValue = isBigChange ? "Copy of " : "";
   const infoClusterString = buildInfoClusters(StyleId);
 
   // Compute idGenContextVal / idGenContextVal2 dynamically from the PLM ID Generator API.
@@ -124,11 +145,11 @@ export async function buildStyleCopyPayload(
       autoNumberId: "1",  // TODO: replace with real PLM autoNumberId
       schema,
       styleData: {
-        SeasonId:     styleInput.SeasonId    ?? null,
-        BrandId:      styleInput.BrandId     ?? null,
+        SeasonId: styleInput.SeasonId ?? null,
+        BrandId: styleInput.BrandId ?? null,
         CollectionId: styleInput.CollectionId ?? null,
-        CategoryId:   styleInput.CategoryId   ?? null,
-        DivisionId:   styleInput.DivisionId   ?? null,
+        CategoryId: styleInput.CategoryId ?? null,
+        DivisionId: styleInput.DivisionId ?? null,
       },
     });
     newContextFieldValue = res.newContextFieldValue;
@@ -150,7 +171,9 @@ export async function buildStyleCopyPayload(
     },
     {
       key: "styleName",
-      value: styleNameValue+"-"+StyleNumber,
+      value: isBigChange
+        ? styleNameValue + StyleNumber
+        : StyleNumber + alphaSuffix,
     },
     {
       key: "description",
@@ -242,7 +265,7 @@ export async function buildStyleCopyPayload(
     },
     {
       key: "code",
-      value: StyleCode,
+      value: isBigChange ? StyleCode : StyleCode + alphaSuffix,
     },
     {
       key: "fields",

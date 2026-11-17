@@ -7,6 +7,7 @@ import type { GroupedStyle } from "../../types/projects";
 import type { TableType } from "../../types/table";
 import { PLM_SYNCED_SECTIONS } from "./constants";
 import { groupItemsByStyle } from "./ProjectDetailsHelpers";
+import { useNavigationBlocker } from "../../hooks/useNavigationBlocker";
 import { useProjectLoading } from "./useProjectLoading";
 import { useProjectSort } from "./useProjectSort";
 import { useProjectAnnotation } from "./useProjectAnnotation";
@@ -50,8 +51,37 @@ export function useProjectDetails({
   const { annotationItem, isAnnotationOpen, openAnnotation, closeAnnotation } =
     useProjectAnnotation();
 
-  const { editStates, getDraftValue, handleFieldChange, handleInlineSave } =
-    useProjectItemEditing({ project, showToast, refreshItems, statusOptions });
+  const {
+    editStates,
+    hasUnsavedChanges,
+    getDraftValue,
+    handleFieldChange,
+    handleInlineSave,
+    saveAllDrafts,
+    discardAllDrafts,
+  } = useProjectItemEditing({
+    project,
+    showToast,
+    refreshItems,
+    statusOptions,
+    items,
+  });
+
+  const { registerBlocker } = useNavigationBlocker();
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    return registerBlocker({
+      isDirty: hasUnsavedChanges,
+      onSave: async () => {
+        return await saveAllDrafts(items);
+      },
+      onDiscard: () => {
+        discardAllDrafts();
+      },
+    });
+  }, [hasUnsavedChanges, registerBlocker, saveAllDrafts, discardAllDrafts, items]);
 
   const {
     deleteItemTarget,
@@ -334,6 +364,7 @@ export function useProjectDetails({
     toast,
     setToast,
     editStates,
+    hasUnsavedChanges,
     statusOptions,
     plmColorwaysMap,
     plmImagesMap,
@@ -350,6 +381,8 @@ export function useProjectDetails({
     handleSort,
     handleFieldChange,
     handleSyncProject,
+    saveAllDrafts,
+    discardAllDrafts,
     openAnnotation,
     closeAnnotation,
     handleProjectSave,

@@ -10,6 +10,7 @@ interface ConfirmModalProps {
   isConfirming?: boolean;
   confirmLabel?: string;
   confirmingLabel?: string;
+  confirmVariant?: 'primary' | 'secondary' | 'outline' | 'text' | 'danger';
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -25,6 +26,7 @@ export default function ConfirmModal({
   isConfirming = false,
   confirmLabel = "Delete",
   confirmingLabel = "Deleting…",
+  confirmVariant = "danger",
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
@@ -36,7 +38,7 @@ export default function ConfirmModal({
           <Button variant="secondary" onClick={onCancel} disabled={isConfirming}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={isConfirming}>
+          <Button variant={confirmVariant} onClick={onConfirm} disabled={isConfirming}>
             {isConfirming ? confirmingLabel : confirmLabel}
           </Button>
         </div>

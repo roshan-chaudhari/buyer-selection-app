@@ -309,6 +309,8 @@ export default function EditItemModal({
             value={styleName}
             onChange={(e) => setStyleName(e.target.value)}
           />
+          {/* Colorways & Colorway Status are PLM-only - hidden for items not in PLM */}
+          {/* {!item.notInPLM && (
           <Dropdown
             label="Colorways"
             id="colorway"
@@ -330,7 +332,9 @@ export default function EditItemModal({
               </option>
             ))}
           </Dropdown>
+          )}
 
+          {!item.notInPLM && (
           <Dropdown
             label="Colorway Status"
             id="colorwayStatus"
@@ -351,6 +355,7 @@ export default function EditItemModal({
               </option>
             ))}
           </Dropdown>
+          )} */}
 
           <Dropdown
             label="Select Condition"

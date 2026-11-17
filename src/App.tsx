@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useCallback } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import DashboardPage from "./features/dashboard/DashboardPage";
 import ProjectDetailsPage from "./features/projects/ProjectDetailsPage";
@@ -7,6 +8,7 @@ import ErrorScreen from "./components/ErrorScreen";
 import { useAuth } from "./hooks/useAuth";
 import MainLayout from "./layouts/MainLayout";
 import type { InforUser } from "./types/api";
+import { NavigationBlockerProvider, useNavigationBlocker } from "./hooks/useNavigationBlocker";
 
 function ProjectDetailsPageWrapper({
   navigate,
@@ -33,7 +35,11 @@ interface AppRoutesProps {
 }
 
 function AppRoutes({ token, logout, currentUser, isLoadingUser }: AppRoutesProps) {
-  const navigate = useNavigate();
+  const { guardedNavigate, checkAndConfirm } = useNavigationBlocker();
+
+  const handleLogout = useCallback(() => {
+    checkAndConfirm(logout);
+  }, [checkAndConfirm, logout]);
 
   return (
     <Routes>
@@ -46,10 +52,10 @@ function AppRoutes({ token, logout, currentUser, isLoadingUser }: AppRoutesProps
         <Route
           element={
             <MainLayout
-              onLogout={logout}
+              onLogout={handleLogout}
               currentUser={currentUser}
               isLoadingUser={isLoadingUser}
-              navigate={navigate}
+              navigate={guardedNavigate}
             />
           }
         >
@@ -58,7 +64,7 @@ function AppRoutes({ token, logout, currentUser, isLoadingUser }: AppRoutesProps
             path="/dashboard"
             element={
               <DashboardPage
-                navigate={navigate}
+                navigate={guardedNavigate}
                 currentUser={currentUser}
               />
             }
@@ -68,7 +74,7 @@ function AppRoutes({ token, logout, currentUser, isLoadingUser }: AppRoutesProps
               index
               element={
                 <ProjectDetailsPageWrapper
-                  navigate={navigate}
+                  navigate={guardedNavigate}
                   currentUser={currentUser}
                 />
               }
@@ -111,12 +117,14 @@ function App() {
 
   return (
     <BrowserRouter>
-      <AppRoutes
-        token={token}
-        logout={logout}
-        currentUser={currentUser}
-        isLoadingUser={isLoadingUser}
-      />
+      <NavigationBlockerProvider>
+        <AppRoutes
+          token={token}
+          logout={logout}
+          currentUser={currentUser}
+          isLoadingUser={isLoadingUser}
+        />
+      </NavigationBlockerProvider>
     </BrowserRouter>
   );
 }

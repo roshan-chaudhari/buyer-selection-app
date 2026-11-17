@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { User, Calendar, Plus, Edit, CloudSync, Lock } from "lucide-react";
 import Button from "../../components/Button";
+import ConfirmModal from "../../components/ConfirmModal";
+import { useNavigationBlocker } from "../../hooks/useNavigationBlocker";
 import type { TableType } from "../../types/table";
 import styles from "./ProjectDetailsPage.module.scss";
 
@@ -27,6 +29,8 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   onSyncProject,
   onEditMetadata,
 }) => {
+  const [confirmSyncOpen, setConfirmSyncOpen] = useState(false);
+  const { checkAndConfirm } = useNavigationBlocker();
   return (
     <>
       {/* Breadcrumb & Top Action */}
@@ -95,7 +99,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
             <Button
               variant="outline"
               className={styles.editBtn}
-              onClick={onSyncProject}
+              onClick={() => checkAndConfirm(() => setConfirmSyncOpen(true))}
               disabled={isSynced || isLocked || isSyncing}
               title={isLocked ? "Project is read-only" : "Synchronize project To SYNCRO"}
               icon={<CloudSync size={14} />}
@@ -112,6 +116,26 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           </div>
         </div>
       </section>
+
+      <ConfirmModal
+        isOpen={confirmSyncOpen && !isLocked && !isSynced}
+        title="Synchronize Project"
+        message={
+          <>
+            Are you sure you want to synchronize project{" "}
+            <strong>{project.ProjectName}</strong> to SYNCRO?
+          </>
+        }
+        confirmLabel="Synchronize"
+        confirmingLabel="Synchronizing…"
+        confirmVariant="primary"
+        isConfirming={isSyncing}
+        onCancel={() => setConfirmSyncOpen(false)}
+        onConfirm={() => {
+          setConfirmSyncOpen(false);
+          onSyncProject();
+        }}
+      />
     </>
   );
 };

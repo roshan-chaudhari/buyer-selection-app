@@ -270,6 +270,9 @@ async function processStyleGroup(
   projectId: number,
   refreshItems: (id: number) => Promise<ProjectItem[]>,
   project: TableType,
+  /** Zero-based suffix index shared across all As-Is / Small Change groups in this sync run.
+   *  Big Change groups should NOT pass this — it defaults to 0 and is ignored for Big Change. */
+  variantSuffixIndex: number = 0,
 ): Promise<{ ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' } | undefined> {
   const firstItem = group.items[0];
   if (!firstItem) return;
@@ -296,6 +299,7 @@ async function processStyleGroup(
     styleInput,
     currentUser.activeSchema,
     currentUser.userId,
+    variantSuffixIndex,
   );
 
   // 2. Post copy job to PLM
@@ -509,9 +513,11 @@ export function useProjectSync({
 
     try {
       const latestItems = await refreshItems(project.id);
-      const groups = groupItemsByStyle(latestItems);
+      // Exclude items that are local-only (not in PLM) from the sync
+      const syncableItems = latestItems.filter((item) => !item.notInPLM);
+      const groups = groupItemsByStyle(syncableItems);
       const totalStyles = groups.length;
-      const totalColorways = latestItems.filter((i) => !!i.colorway).length;
+      const totalColorways = syncableItems.filter((i) => !!i.colorway).length;
 
       const syncedStylesList: { ItemId: number; ItemName: string; ItemNumber: string; ItemType: 'Style' | 'Material' }[] = [];
 
@@ -528,6 +534,10 @@ export function useProjectSync({
         }
       }
 
+      // Shared suffix counter for As-Is and Small Change Style groups.
+      // Big Change groups do NOT consume a suffix — the counter only advances for variants.
+      let variantSuffixCounter = 0;
+
       for (const group of groups) {
         if (!group.items[0]) continue;
         try {
@@ -537,7 +547,24 @@ export function useProjectSync({
               syncedStylesList.push(syncedMaterial);
             }
           } else {
-            const syncedStyle = await processStyleGroup(group, activeUser, project.id, refreshItems, project);
+            const cond = (group.selectionCondition ?? "").toLowerCase().trim();
+            const isBigChange = cond.includes("big") && cond.includes("change");
+
+            // Pass the current counter only for As-Is / Small Change; Big Change ignores it.
+            const syncedStyle = await processStyleGroup(
+              group,
+              activeUser,
+              project.id,
+              refreshItems,
+              project,
+              variantSuffixCounter,
+            );
+
+            // Advance the counter only after a successful variant (As-Is / Small Change).
+            if (!isBigChange) {
+              variantSuffixCounter++;
+            }
+
             if (syncedStyle) {
               syncedStylesList.push(syncedStyle);
             }

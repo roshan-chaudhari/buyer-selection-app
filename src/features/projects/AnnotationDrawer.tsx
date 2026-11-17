@@ -35,12 +35,18 @@ export default function AnnotationDrawer({
   item,
   projectName,
   onSave,
-  plmImageUrl,
-  isLoadingPlmImage,
-  plmImageError,
+  plmImageUrl: plmImageUrlProp,
+  isLoadingPlmImage: isLoadingPlmImageProp,
+  plmImageError: plmImageErrorProp,
   onRetryFetch,
   isLocked = false,
 }: AnnotationDrawerProps) {
+  // Non-PLM items are project-level only: never use / wait for / report on PLM images.
+  const isNotInPlm = !!item?.notInPLM;
+  const plmImageUrl = isNotInPlm ? null : plmImageUrlProp;
+  const isLoadingPlmImage = isNotInPlm ? false : isLoadingPlmImageProp;
+  const plmImageError = isNotInPlm ? null : plmImageErrorProp;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ImageEditor | null>(null);
   const lastLoadedUrlRef = useRef<string | null>(null);
@@ -49,7 +55,8 @@ export default function AnnotationDrawer({
   const [menuPosition, setMenuPosition] = useState<'left' | 'bottom'>(getMenuPosition);
 
   // local skippedToTemplate bypass state
-  const [skippedToTemplate, setSkippedToTemplate] = useState(false);
+  const [skippedToTemplateState, setSkippedToTemplate] = useState(false);
+  const skippedToTemplate = skippedToTemplateState || isNotInPlm;
 
   const [prevItemId, setPrevItemId] = useState<number | null>(null);
   const [prevIsOpen, setPrevIsOpen] = useState(false);
@@ -93,7 +100,8 @@ export default function AnnotationDrawer({
       }
     }
     setImages(list);
-    setCurrentIndex(0);
+    // Non-PLM items have no PLM original: open straight on their saved image
+    setCurrentIndex(isNotInPlm && list.length > 0 ? 1 : 0);
   }
 
   // Track viewport changes to update menu position
@@ -472,8 +480,10 @@ export default function AnnotationDrawer({
                   onClick={() => document.getElementById('drawer-image-upload')?.click()}
                   icon={<Plus size={14} />}
                   disabled={isSaving}
-                  title="Upload additional image"
-                />
+                  title={isNotInPlm ? "Add image" : "Upload additional image"}
+                >
+                  {isNotInPlm ? "Add Image" : null}
+                </Button>
 
                 {currentIndex > 0 && (
                   <Button
@@ -501,9 +511,9 @@ export default function AnnotationDrawer({
                 />
                 <span
                   className={styles.imageCounter}
-                  title={currentIndex === 0 ? "Original PLM Style Image" : `Annotation ${currentIndex}`}
+                  title={currentIndex === 0 ? (isNotInPlm ? "Default Template" : "Original PLM Style Image") : `Annotation ${currentIndex}`}
                 >
-                  {currentIndex === 0 ? "Original (PLM)" : `Annotation ${currentIndex}/${images.length}`}
+                  {currentIndex === 0 ? (isNotInPlm ? "Default Template" : "Original (PLM)") : `Annotation ${currentIndex}/${images.length}`}
                 </span>
                 <Button
                   variant="text"

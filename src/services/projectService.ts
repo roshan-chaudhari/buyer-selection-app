@@ -31,6 +31,8 @@ export interface ProjectItem {
   sampleDue: string | null;
   buyerComments: string;
   internalComments: string;
+  /** True when this item was added locally and does not exist in PLM. It will be excluded from PLM sync. */
+  notInPLM?: boolean;
   annotatedImage?: string | null;
   createdDate?: string;
   colorwaysWithIds?: { colorway: string; colorId: number }[];
