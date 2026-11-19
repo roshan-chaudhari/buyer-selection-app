@@ -50,8 +50,8 @@ function buildColorwayOptions(
   };
 }
 
-// Use shared getFirstImage helper from src/utils/image
-import { getFirstImage } from "../../utils/image";
+// Use shared image helpers from src/utils/image
+import { getFirstImage, extractAnnotationS3Urls } from "../../utils/image";
 
 export function useProjectColumns({
   plmColorwaysMap,
@@ -71,6 +71,7 @@ export function useProjectColumns({
         const plmUrl = plmImagesMap[row.styleMaterialNumber] || null;
         const targetImage = getFirstImage(row.annotatedImage, plmUrl);
         const hasRealImage = !!(targetImage && targetImage !== DEFAULT_GARMENT_SVG);
+        const uploadedCount = extractAnnotationS3Urls(row.annotatedImage).length;
         return (
           <div
             role="button"
@@ -104,6 +105,11 @@ export function useProjectColumns({
                 }
               }}
             />
+            {uploadedCount > 1 && (
+              <span className={styles.thumbnailCountBadge} title={`${uploadedCount} images uploaded`}>
+                {uploadedCount}
+              </span>
+            )}
           </div>
         );
       },

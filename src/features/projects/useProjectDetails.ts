@@ -200,6 +200,7 @@ export function useProjectDetails({
               ? projectService.updateProjectItem(it.id, {
                 styleMaterialNumber: it.styleMaterialNumber,
                 styleMaterialName: it.styleMaterialName,
+                itemType: it.itemType,
                 colorway: it.colorway,
                 colorwayStatus: it.colorwayStatus,
                 colorStatusId: it.colorStatusId,
@@ -207,6 +208,7 @@ export function useProjectDetails({
                 sampleDue: it.sampleDue,
                 buyerComments: it.buyerComments,
                 internalComments: it.internalComments,
+                notInPLM: it.notInPLM,
                 annotatedImage: annotatedDataUrl,
               })
               : Promise.resolve()

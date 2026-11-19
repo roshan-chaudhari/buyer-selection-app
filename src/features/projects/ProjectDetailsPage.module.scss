@@ -599,6 +599,21 @@
   border-radius: inherit;
 }
 
+.thumbnailCountBadge {
+  position: absolute;
+  bottom: 0.125rem;
+  right: 0.125rem;
+  z-index: 2;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  padding: 0.0625rem 0.25rem;
+  border-radius: 0.25rem;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
 .truncateText {
   white-space: nowrap;
   overflow: hidden;

@@ -66,6 +66,9 @@ export default function AnnotationDrawer({
   // Multi-image list state (stores custom S3 / edited image URLs only)
   const [images, setImages] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const currentIndexRef = useRef(0);
+  currentIndexRef.current = currentIndex;
+  const dirtyIndexesRef = useRef<Set<number>>(new Set());
 
   const currentItemId = item?.id ?? null;
   if (currentItemId !== prevItemId || isOpen !== prevIsOpen) {
@@ -104,7 +107,9 @@ export default function AnnotationDrawer({
     // Store annotations in `images` (excluding the permanent default PLM image)
     const annotationsOnly = list.filter((url) => !url.includes('_default_') && !url.includes('-default-'));
     setImages(annotationsOnly);
-    setCurrentIndex(0); // Always start on Original (PLM) image (Index 0)
+    // For PLM items, always start on Original (PLM) image (Index 0).
+    // For non-PLM items with uploaded images, open directly on the first uploaded image (Index 1).
+    setCurrentIndex(isNotInPlm && annotationsOnly.length > 0 ? 1 : 0);
   }
 
   // Track viewport changes to update menu position
@@ -121,10 +126,10 @@ export default function AnnotationDrawer({
   useEffect(() => {
     if (!isOpen || !item || !containerRef.current) return;
 
-    // Load initial image on mount/open -> Always open clean Original PLM Image
-    const initialRaw = (skippedToTemplate ? null : plmImageUrl)
-      || images[0]
-      || DEFAULT_GARMENT_SVG;
+    // Load initial image on mount/open
+    const initialRaw = (isNotInPlm && images.length > 0)
+      ? images[0]
+      : ((skippedToTemplate ? null : plmImageUrl) || images[0] || DEFAULT_GARMENT_SVG);
     const initialImage = formatDisplayImageUrl(initialRaw);
     lastLoadedUrlRef.current = initialImage;
 
@@ -149,6 +154,11 @@ export default function AnnotationDrawer({
       });
 
       editorRef.current = editor;
+      dirtyIndexesRef.current = new Set();
+      // Undo stack > 0 means the user edited the currently loaded image
+      editor.on('undoStackChanged', (length: number) => {
+        if (length > 0) dirtyIndexesRef.current.add(currentIndexRef.current);
+      });
 
       return () => {
         if (editorRef.current) {
@@ -175,7 +185,7 @@ export default function AnnotationDrawer({
 
     let targetImage = DEFAULT_GARMENT_SVG;
     if (currentIndex === 0) {
-      targetImage = (skippedToTemplate ? null : plmImageUrl) || DEFAULT_GARMENT_SVG;
+      targetImage = (skippedToTemplate ? null : plmImageUrl) || (isNotInPlm && images[0]) || DEFAULT_GARMENT_SVG;
     } else if (images[currentIndex - 1]) {
       targetImage = images[currentIndex - 1];
     }
@@ -214,8 +224,10 @@ export default function AnnotationDrawer({
     };
   }, [isOpen]);
 
+  // Only export the editor canvas when the user actually edited the current image.
+  // Re-exporting untouched / still-loading images produced black thumbnails.
   const saveCurrentImageToState = () => {
-    if (editorRef.current) {
+    if (editorRef.current && dirtyIndexesRef.current.has(currentIndex)) {
       try {
         const dataUrl = editorRef.current.toDataURL({ format: 'jpeg', quality: 0.8 });
         if (currentIndex > 0) {
@@ -235,14 +247,34 @@ export default function AnnotationDrawer({
     return null;
   };
 
+  const handleSelectImage = async (index: number) => {
+    if (index === currentIndex) return;
+    saveCurrentImageToState();
+    setCurrentIndex(index);
+
+    let nextRaw = DEFAULT_GARMENT_SVG;
+    if (index === 0) {
+      nextRaw = (skippedToTemplate ? null : plmImageUrl) || (isNotInPlm && images[0]) || DEFAULT_GARMENT_SVG;
+    } else if (images[index - 1]) {
+      nextRaw = images[index - 1];
+    }
+
+    const nextUrl = formatDisplayImageUrl(nextRaw);
+    lastLoadedUrlRef.current = nextUrl;
+    if (editorRef.current) {
+      await editorRef.current.loadImageFromURL(nextUrl, `Image-${index}`).catch(() => {});
+    }
+  };
+
   const handlePrev = async () => {
-    if (currentIndex > 0) {
+    const minIndex = isNotInPlm && images.length > 0 ? 1 : 0;
+    if (currentIndex > minIndex) {
       saveCurrentImageToState();
       const nextIdx = currentIndex - 1;
       setCurrentIndex(nextIdx);
       const nextUrl = formatDisplayImageUrl(
         nextIdx === 0
-          ? ((skippedToTemplate ? null : plmImageUrl) || DEFAULT_GARMENT_SVG)
+          ? ((skippedToTemplate ? null : plmImageUrl) || (isNotInPlm && images[0]) || DEFAULT_GARMENT_SVG)
           : images[nextIdx - 1]
       );
       lastLoadedUrlRef.current = nextUrl;
@@ -266,43 +298,86 @@ export default function AnnotationDrawer({
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    saveCurrentImageToState();
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        if (base64) {
-          lastLoadedUrlRef.current = base64;
-          const nextIndex = images.length + 1;
-          setImages(prev => [...prev, base64]);
-          setCurrentIndex(nextIndex);
-
-          if (editorRef.current) {
-            await editorRef.current.loadImageFromURL(base64, `Upload-${nextIndex}`).catch((err) => {
-              console.error("Failed to load uploaded image in editor:", err);
-            });
-          }
-        }
+      const readFileAsBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
       };
-      reader.readAsDataURL(file);
+
+      const files = Array.from(fileList);
+      const base64List = await Promise.all(files.map(readFileAsBase64));
+      const validBase64List = base64List.filter(Boolean);
+
+      if (validBase64List.length > 0) {
+        const startIndex = images.length;
+        const newImages = [...images, ...validBase64List];
+        setImages(newImages);
+
+        const targetIndex = startIndex + 1;
+        setCurrentIndex(targetIndex);
+
+        const firstNewBase64 = validBase64List[0];
+        lastLoadedUrlRef.current = firstNewBase64;
+        if (editorRef.current) {
+          await editorRef.current.loadImageFromURL(firstNewBase64, `Upload-${targetIndex}`).catch((err) => {
+            console.error("Failed to load uploaded image in editor:", err);
+          });
+        }
+      }
     } catch (err) {
-      console.error("Failed to load file:", err);
-      setErrorMsg("Failed to load uploaded image.");
+      console.error("Failed to load file(s):", err);
+      setErrorMsg("Failed to load uploaded image(s).");
     }
 
     e.target.value = '';
   };
 
-  const handleRemoveImage = async () => {
-    if (!item?.id || currentIndex === 0) return;
-    const targetIdx = currentIndex - 1;
+  /**
+   * Uploads every not-yet-saved (base64) image to S3 sequentially and returns the final S3 URL list.
+   * NOTE: itemId is intentionally NOT sent - otherwise the backend overwrites the item's
+   * AnnotatedImage with just that single URL (and deletes the other S3 images).
+   * The complete array is persisted once through onSave().
+   */
+  const uploadPendingImages = async (list: string[]): Promise<string[]> => {
+    const result: string[] = [];
+    const stamp = Date.now();
+    for (let idx = 0; idx < list.length; idx++) {
+      const img = list[idx];
+      if (img && img.startsWith('data:')) {
+        const ext = img.match(/^data:image\/(\w+);/)?.[1] || 'jpg';
+        const cleanStyle = (item?.styleMaterialNumber || 'style').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const s3Result = await projectService.uploadImageToS3({
+          projectName: projectName || 'General',
+          styleName: item?.styleMaterialNumber || item?.styleMaterialName || 'Style',
+          base64Data: img,
+          fileName: `${cleanStyle}_${stamp}_${idx}.${ext}`,
+        });
+        result.push(s3Result.url);
+      } else if (img) {
+        result.push(img);
+      }
+    }
+    return result;
+  };
+
+  const handleRemoveImageByIndex = async (indexToRemove: number) => {
+    if (!item?.id || indexToRemove <= 0) return;
+    const targetIdx = indexToRemove - 1;
     const removedImage = images[targetIdx];
-    const updatedImages = images.filter((_, idx) => idx !== targetIdx);
+    const remaining = images.filter((_, idx) => idx !== targetIdx);
 
     setIsSaving(true);
     try {
+      const updatedImages = await uploadPendingImages(remaining);
       if (removedImage && (removedImage.includes('amazonaws.com') || removedImage.includes('buyerapp-image'))) {
         await projectService.deleteImageFromS3(removedImage);
       }
@@ -310,13 +385,26 @@ export default function AnnotationDrawer({
       const serialized = updatedImages.length > 0 ? JSON.stringify(updatedImages) : '[]';
       await onSave(item.id, serialized);
 
+      dirtyIndexesRef.current = new Set();
       setImages(updatedImages);
-      setCurrentIndex(0); // return to Original PLM image (Index 0)
 
-      const fallback = formatDisplayImageUrl(plmImageUrl || DEFAULT_GARMENT_SVG);
+      let nextIdx = 0;
+      if (isNotInPlm) {
+        nextIdx = updatedImages.length > 0 ? 1 : 0;
+      } else {
+        nextIdx = currentIndex === indexToRemove
+          ? Math.max(0, indexToRemove - 1)
+          : (currentIndex > indexToRemove ? currentIndex - 1 : currentIndex);
+      }
+      setCurrentIndex(nextIdx);
+
+      const nextRaw = nextIdx === 0
+        ? ((skippedToTemplate ? null : plmImageUrl) || (isNotInPlm && updatedImages[0]) || DEFAULT_GARMENT_SVG)
+        : updatedImages[nextIdx - 1];
+      const fallback = formatDisplayImageUrl(nextRaw);
       lastLoadedUrlRef.current = fallback;
       if (editorRef.current) {
-        await editorRef.current.loadImageFromURL(fallback, 'PLM-Original').catch(() => {});
+        await editorRef.current.loadImageFromURL(fallback, `Image-${nextIdx}`).catch(() => {});
       }
     } catch (err) {
       console.error("Failed to remove image:", err);
@@ -324,6 +412,11 @@ export default function AnnotationDrawer({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleRemoveImage = async () => {
+    if (!item?.id || currentIndex === 0) return;
+    await handleRemoveImageByIndex(currentIndex);
   };
 
   const handleSaveClick = async () => {
@@ -355,46 +448,41 @@ export default function AnnotationDrawer({
       }
 
       let updatedImages = [...images];
-      if (editorRef.current) {
+      // Only export the editor canvas if the user actually edited the image being shown
+      if (editorRef.current && dirtyIndexesRef.current.has(currentIndex)) {
         const dataUrl = editorRef.current.toDataURL({ format: 'jpeg', quality: 0.8 });
         if (currentIndex === 0) {
-          // Saving new annotation created from the original PLM image
-          updatedImages = [dataUrl, ...images.filter(x => !x.startsWith('data:'))];
-        } else {
-          // Updating existing annotation slot
+          if (isNotInPlm) {
+            if (updatedImages.length === 0) {
+              updatedImages = [dataUrl];
+            } else {
+              updatedImages[0] = dataUrl;
+            }
+          } else {
+            // User drew on the original PLM style image -> store as a new annotation
+            updatedImages = [dataUrl, ...images];
+          }
+        } else if (currentIndex > 0 && currentIndex <= updatedImages.length) {
           updatedImages[currentIndex - 1] = dataUrl;
         }
       }
 
-      // 2. Upload only newly added/modified base64 images to S3
-      const s3UrlImages = await Promise.all(
-        updatedImages.map(async (img, idx) => {
-          if (img && img.startsWith('data:')) {
-            const ext = img.match(/^data:image\/(\w+);/)?.[1] || 'jpg';
-            const fileName = `${item.styleMaterialNumber || 'style'}_${Date.now()}_${idx}.${ext}`;
-            const s3Result = await projectService.uploadImageToS3({
-              projectName: projectName || 'General',
-              styleName: item.styleMaterialNumber || item.styleMaterialName || 'Style',
-              base64Data: img,
-              fileName,
-              itemId: item.id,
-            });
-            return s3Result.url;
-          }
-          // Existing S3 URL -> do not re-upload
-          return img;
-        })
-      );
+      // 2. Upload ALL pending (base64) images to S3 - no itemId so nothing gets overwritten
+      const s3UrlImages = await uploadPendingImages(updatedImages);
+
+      // Keep the permanent PLM default image reference stored with the item
+      const defaultUrls = oldS3Urls.filter((u) => u.includes('_default_') || u.includes('-default-'));
+      const finalList = [...defaultUrls, ...s3UrlImages];
 
       // 3. Clean up any previous S3 image copy that was replaced (prevents duplicate copies on S3!)
-      const newUrlsSet = new Set(s3UrlImages);
+      const newUrlsSet = new Set(finalList);
       for (const oldUrl of oldS3Urls) {
         if (!newUrlsSet.has(oldUrl)) {
           await projectService.deleteImageFromS3(oldUrl);
         }
       }
 
-      const serialized = s3UrlImages.length > 0 ? JSON.stringify(s3UrlImages) : '';
+      const serialized = finalList.length > 0 ? JSON.stringify(finalList) : '[]';
       await onSave(item.id, serialized);
       onClose();
     } catch (err) {
@@ -466,6 +554,119 @@ export default function AnnotationDrawer({
           />
         </div>
 
+        {/* Annotation Grid: Display all uploaded images as thumbnail cards */}
+        <div className={styles.annotationGridSection}>
+          <div className={styles.annotationGridHeader}>
+            <span className={styles.annotationGridTitle}>
+              Annotation Grid ({isNotInPlm ? images.length : images.length + 1} {images.length === 1 && isNotInPlm ? "Image" : "Images"})
+            </span>
+            <span className={styles.annotationGridHint}>
+              Click to view/edit. First 3 uploaded images export to PPT.
+            </span>
+          </div>
+
+          <div className={styles.annotationGridList}>
+            {/* Original PLM image (for PLM items) */}
+            {!isNotInPlm && (
+              <div
+                role="button"
+                tabIndex={0}
+                className={`${styles.gridThumbCard} ${currentIndex === 0 ? styles.activeCard : ''}`}
+                onClick={() => handleSelectImage(0)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleSelectImage(0)}
+                title="Original PLM Style Image"
+              >
+                <img
+                  src={formatDisplayImageUrl(plmImageUrl || DEFAULT_GARMENT_SVG)}
+                  alt="Original PLM"
+                  className={styles.gridThumbImg}
+                />
+                <span className={styles.gridThumbLabel}>PLM Style</span>
+                {currentIndex === 0 && <span className={styles.activeBadge}>Active</span>}
+              </div>
+            )}
+
+            {/* Default template card (for non-PLM items with no uploaded images) */}
+            {isNotInPlm && images.length === 0 && (
+              <div
+                role="button"
+                tabIndex={0}
+                className={`${styles.gridThumbCard} ${currentIndex === 0 ? styles.activeCard : ''}`}
+                onClick={() => handleSelectImage(0)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleSelectImage(0)}
+                title="Default Garment Template"
+              >
+                <img
+                  src={DEFAULT_GARMENT_SVG}
+                  alt="Template"
+                  className={styles.gridThumbImg}
+                />
+                <span className={styles.gridThumbLabel}>Template</span>
+                {currentIndex === 0 && <span className={styles.activeBadge}>Active</span>}
+              </div>
+            )}
+
+            {/* All uploaded images */}
+            {images.map((imgUrl, idx) => {
+              const cardIndex = idx + 1;
+              const isActive = currentIndex === cardIndex;
+              let slotName = `Image ${idx + 1}`;
+              if (idx === 0) slotName = "1: Front";
+              else if (idx === 1) slotName = "2: Back";
+              else if (idx === 2) slotName = "3: Fabric";
+
+              return (
+                <div
+                  key={idx}
+                  role="button"
+                  tabIndex={0}
+                  className={`${styles.gridThumbCard} ${isActive ? styles.activeCard : ''}`}
+                  onClick={() => handleSelectImage(cardIndex)}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleSelectImage(cardIndex)}
+                  title={`${slotName} - Click to edit`}
+                >
+                  <img
+                    src={formatDisplayImageUrl(imgUrl)}
+                    alt={slotName}
+                    className={styles.gridThumbImg}
+                  />
+                  <span className={styles.gridThumbLabel}>{slotName}</span>
+                  {isActive && <span className={styles.activeBadge}>Active</span>}
+                  {/* {!isLocked && (
+                    <button
+                      type="button"
+                      className={styles.gridThumbDeleteBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleRemoveImageByIndex(cardIndex);
+                      }}
+                      title="Delete this image"
+                      aria-label={`Delete ${slotName}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )} */}
+                </div>
+              );
+            })}
+
+            {/* Upload Button Card */}
+            {/* {!isLocked && (
+              <div
+                role="button"
+                tabIndex={0}
+                className={styles.gridUploadCard}
+                onClick={() => document.getElementById('drawer-image-upload')?.click()}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && document.getElementById('drawer-image-upload')?.click()}
+                title="Upload image(s)"
+              >
+                <Plus size={20} className={styles.gridUploadIcon} />
+                <span className={styles.gridUploadLabel}>Add Images</span>
+              </div>
+            )} */}
+          </div>
+        </div>
+
         {/* Footer Controls */}
         <div className={styles.drawerFooter}>
           <div className={styles.footerLeft}>
@@ -475,6 +676,7 @@ export default function AnnotationDrawer({
                   type="file"
                   id="drawer-image-upload"
                   accept="image/*"
+                  multiple
                   style={{ display: 'none' }}
                   onChange={handleFileUpload}
                 />
@@ -483,7 +685,7 @@ export default function AnnotationDrawer({
                   onClick={() => document.getElementById('drawer-image-upload')?.click()}
                   icon={<Plus size={14} />}
                   disabled={isSaving}
-                  title={isNotInPlm ? "Add image" : "Upload additional image"}
+                  title="Upload additional image(s)"
                 >
                   {isNotInPlm ? "Add Image" : null}
                 </Button>
@@ -494,19 +696,19 @@ export default function AnnotationDrawer({
                     onClick={handleRemoveImage}
                     disabled={isSaving}
                     icon={<Trash2 size={14} />}
-                    title="Delete this annotation from S3"
+                    title="Delete this image from S3"
                   />
                 )}
               </>
             )}
           </div>
 
-          {images.length > 0 && (
+          {(images.length > 0 || !isNotInPlm) && (
             <div className={styles.footerCenter}>
               <div className={styles.navigationRow}>
                 <Button
                   variant="text"
-                  disabled={currentIndex === 0 || isSaving}
+                  disabled={currentIndex === (isNotInPlm && images.length > 0 ? 1 : 0) || isSaving}
                   onClick={handlePrev}
                   icon={<ChevronLeft size={16} />}
                   style={{ minWidth: 0, padding: '0.25rem' }}
@@ -514,9 +716,9 @@ export default function AnnotationDrawer({
                 />
                 <span
                   className={styles.imageCounter}
-                  title={currentIndex === 0 ? (isNotInPlm ? "Default Template" : "Original PLM Style Image") : `Annotation ${currentIndex}`}
+                  title={currentIndex === 0 ? (isNotInPlm ? "Default Template" : "Original PLM Style Image") : `Image ${currentIndex}`}
                 >
-                  {currentIndex === 0 ? (isNotInPlm ? "Default Template" : "Original (PLM)") : `Annotation ${currentIndex}/${images.length}`}
+                  {currentIndex === 0 ? (isNotInPlm ? "Default Template" : "Original (PLM)") : `Image ${currentIndex}/${images.length}`}
                 </span>
                 <Button
                   variant="text"

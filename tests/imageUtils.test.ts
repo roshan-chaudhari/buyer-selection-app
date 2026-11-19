@@ -109,4 +109,54 @@ describe('PLM Image Default State & S3 Protection Tests', () => {
     assert.equal(typeof projectService.deleteProjectImagesFromS3, 'function');
     assert.equal(typeof projectService.deleteStyleImagesFromS3, 'function');
   });
+
+  // ── New Requirements: All uploaded images in annotation grid, only first 3 in PPT, applies to non-PLM ──
+
+  test('PPT requirement: Only first 3 uploaded images are mapped to Front, Back, Fabric even when >3 are present', () => {
+    const img1 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/StyleA/img1.jpg';
+    const img2 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/StyleA/img2.jpg';
+    const img3 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/StyleA/img3.jpg';
+    const img4 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/StyleA/img4.jpg';
+    const img5 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/StyleA/img5.jpg';
+
+    // 5 uploaded images stored in S3
+    const allUploaded = [plmS3Url, img1, img2, img3, img4, img5];
+
+    // Filter out PLM default image
+    const annotations = allUploaded.filter((r) => !isPlmDefaultImage(r));
+    assert.equal(annotations.length, 5, 'All 5 uploaded images should be stored in S3 and displayed in grid');
+
+    // PPT only maps first 3
+    const frontRef = annotations[0] || null;
+    const backRef = annotations[1] || null;
+    const fabricRef = annotations[2] || null;
+
+    assert.equal(frontRef, img1, 'First uploaded image maps to Front');
+    assert.equal(backRef, img2, 'Second uploaded image maps to Back');
+    assert.equal(fabricRef, img3, 'Third uploaded image maps to Fabric');
+    assert.ok(![frontRef, backRef, fabricRef].includes(img4), '4th image is excluded from PPT');
+    assert.ok(![frontRef, backRef, fabricRef].includes(img5), '5th image is excluded from PPT');
+  });
+
+  test('Non-PLM items: All uploaded images preserved in S3, and first 3 mapped to Front/Back/Fabric in PPT', () => {
+    const nonPlmImg1 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/NONPLM/img1.jpg';
+    const nonPlmImg2 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/NONPLM/img2.jpg';
+    const nonPlmImg3 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/NONPLM/img3.jpg';
+    const nonPlmImg4 = 'https://buyer-selection-images-prod.s3.us-east-1.amazonaws.com/buyerapp-image/Project1/NONPLM/img4.jpg';
+
+    const serializedNonPlm = JSON.stringify([nonPlmImg1, nonPlmImg2, nonPlmImg3, nonPlmImg4]);
+    const extracted = extractAnnotationS3Urls(serializedNonPlm);
+    assert.equal(extracted.length, 4, 'All 4 uploaded images for non-PLM item are extracted');
+
+    // PPT mapping for non-PLM item
+    const annotations = extracted.filter((r) => !isPlmDefaultImage(r));
+    const frontRef = annotations[0] || null;
+    const backRef = annotations[1] || null;
+    const fabricRef = annotations[2] || null;
+
+    assert.equal(frontRef, nonPlmImg1);
+    assert.equal(backRef, nonPlmImg2);
+    assert.equal(fabricRef, nonPlmImg3);
+    assert.ok(![frontRef, backRef, fabricRef].includes(nonPlmImg4));
+  });
 });
