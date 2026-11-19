@@ -11,8 +11,11 @@ import {
   type ProjectItem,
 } from "../../services/projectService";
 import type { TableType } from "../../types/table";
-import { odata2style, odata2material } from "../../services/api";
+import { odata2style, odata2material, fetchStyleImage } from "../../services/api";
 import { extractODataList } from "../../utils/odata";
+import { resolveImageBlob } from "../../utils/image";
+import { resetStyleImageDeleted } from "./usePlmStyleImages";
+import type { InforUser } from "../../types/api";
 import styles from "./AddStylesModal.module.scss";
 
 interface AddStylesModalProps {
@@ -20,8 +23,18 @@ interface AddStylesModalProps {
   onClose: () => void;
   project: TableType;
   existingItems?: ProjectItem[];
+  currentUser?: InforUser | null;
   onAddStyles: (updated: TableType) => void;
   onError?: (message: string) => void;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 interface ParsedQrInfo {
@@ -57,6 +70,7 @@ export default function AddStylesModal({
   onClose,
   project,
   existingItems = [],
+  currentUser,
   onAddStyles,
   onError,
 }: AddStylesModalProps) {
@@ -430,7 +444,46 @@ export default function AddStylesModal({
             colorwayStatus: "Selected",
           });
         } else {
-          // Add new item to project
+          // Auto-fetch image from PLM and save to S3 immediately if available
+          if (currentUser && styleObj && itemType === "Style") {
+            try {
+              const resolvedStyleId = styleObj.StyleId || styleObj.Id;
+              if (resolvedStyleId) {
+                const plmImg = await fetchStyleImage(resolvedStyleId, currentUser);
+                if (plmImg) {
+                  let base64Data: string | null = null;
+                  if (plmImg.startsWith("data:")) {
+                    base64Data = plmImg;
+                  } else {
+                    const blob = await resolveImageBlob(plmImg);
+                    if (blob) {
+                      base64Data = await blobToDataUrl(blob);
+                    }
+                  }
+                  if (base64Data) {
+                    const ext = base64Data.match(/^data:image\/(\w+);/)?.[1] || "jpg";
+                    const cleanStyle = styleNumber.replace(/[^a-zA-Z0-9_-]/g, "_");
+                    const fileName = `${cleanStyle}_default_${Date.now()}.${ext}`;
+
+                    const s3Result = await projectService.uploadImageToS3({
+                      projectName: project.ProjectName || "General",
+                      styleName: styleNumber,
+                      base64Data,
+                      fileName,
+                    });
+                    if (s3Result && s3Result.url) {
+                      payload.annotatedImage = JSON.stringify([s3Result.url]);
+                      resetStyleImageDeleted(styleNumber);
+                    }
+                  }
+                }
+              }
+            } catch (imgErr) {
+              console.warn("[AddStylesModal] Auto-save PLM image to S3 on add failed:", imgErr);
+            }
+          }
+
+          // Add new item to project with S3 image already saved
           await projectService.addItemToProject(project.id!, payload);
         }
 
@@ -459,6 +512,7 @@ export default function AddStylesModal({
     [
       project,
       existingItems,
+      currentUser,
       fetchAndValidateStyle,
       mapODataStyleToItemPayload,
       onAddStyles,

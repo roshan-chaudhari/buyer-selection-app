@@ -11,41 +11,9 @@ import type {StyleColorway, StyleObject, ColorwayOption, LookupOption } from '..
 import { extractODataList } from '../../utils/odata';
 import { toDateInputValue, formatScannedDate } from '../../utils/date';
 import styles from './EditItemModal.module.scss';
+import { DEFAULT_GARMENT_SVG } from './constants';
 
-const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
-
-function formatDisplayImageUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
-    return url;
-  }
-  if (url.includes('/api/projects/proxy-image')) {
-    return url;
-  }
-  if (url.includes('amazonaws.com') || url.includes('buyerapp-image')) {
-    return `${defaultBaseUrl}/api/projects/proxy-image?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
-
-function getFirstImage(imgStr: string | null | undefined, plmUrl: string | null): string | null {
-  if (imgStr) {
-    if (imgStr.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(imgStr);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const first = parsed[0];
-          const val = (typeof first === 'object' ? first.annotated || first.original : first) || '';
-          if (val) return formatDisplayImageUrl(val);
-        }
-      } catch (e) {}
-    } else if (imgStr.startsWith('http') || imgStr.startsWith('data:') || imgStr.startsWith('blob:')) {
-      return formatDisplayImageUrl(imgStr);
-    }
-  }
-  return plmUrl || null;
-}
-
+import { getFirstImage, extractAnnotationS3Urls } from '../../utils/image';
 
 function buildColorwayQueryParams(
   styleId: number | undefined,
@@ -83,6 +51,7 @@ interface EditItemModalProps {
   onSave: (updated: ProjectItem) => void;
   onError?: (message: string) => void;
   onOpenAnnotation?: (item: ProjectItem) => void;
+  onImageDeleted?: (styleMaterialNumber: string) => void;
   plmImageUrl: string | null;
   isLoadingPlmImage: boolean;
   plmImageError: string | null;
@@ -97,6 +66,7 @@ export default function EditItemModal({
   onSave,
   onError,
   onOpenAnnotation,
+  onImageDeleted: _onImageDeleted,
   plmImageUrl,
   isLoadingPlmImage,
   plmImageError,
@@ -244,6 +214,15 @@ export default function EditItemModal({
 
     setIsSaving(true);
     try {
+      // Clean up annotation S3 URLs if any were removed (PLM default images are protected and never deleted)
+      const oldAnnotationUrls = extractAnnotationS3Urls(item.annotatedImage);
+      const newAnnotationUrls = new Set(extractAnnotationS3Urls(annotatedImage));
+      for (const oldUrl of oldAnnotationUrls) {
+        if (!newAnnotationUrls.has(oldUrl)) {
+          await projectService.deleteImageFromS3(oldUrl);
+        }
+      }
+
       const updated = await projectService.updateProjectItem(item.id, {
         styleId: styleId || 0,
         colorId: colorId || 0,
@@ -256,7 +235,7 @@ export default function EditItemModal({
         sampleDue: sampleDue || null,
         buyerComments: buyerComments.trim(),
         internalComments: internalComments.trim(),
-        annotatedImage,
+        annotatedImage: annotatedImage ?? "[]",
         colorwaysWithIds,
       });
       onSave(updated);
@@ -398,16 +377,11 @@ export default function EditItemModal({
           <label>Image Annotation</label>
           <div className={styles.editModalThumbnailRow}>
             <div className={styles.editModalThumbnail}>
-              {annotatedImage ? (
+              {getFirstImage(annotatedImage, plmImageUrl) !== DEFAULT_GARMENT_SVG ? (
                 <img
-                  src={getFirstImage(annotatedImage, plmImageUrl) || ""}
-                  alt="Annotation Thumbnail"
+                  src={getFirstImage(annotatedImage, plmImageUrl)}
+                  alt="Style Thumbnail"
                   className={styles.editModalThumbnailImg}
-                  onError={(e) => {
-                    if (plmImageUrl && e.currentTarget.src !== plmImageUrl) {
-                      e.currentTarget.src = plmImageUrl;
-                    }
-                  }}
                 />
               ) : isLoadingPlmImage ? (
                 <div className={styles.thumbnailSpinner} title="Loading Style image from PLM..." />
@@ -415,12 +389,6 @@ export default function EditItemModal({
                 <div className={styles.thumbnailError} title={plmImageError}>
                   Error Loading PLM
                 </div>
-              ) : plmImageUrl ? (
-                <img
-                  src={plmImageUrl}
-                  alt="PLM Style Thumbnail"
-                  className={styles.editModalThumbnailImg}
-                />
               ) : (
                 <div className={styles.editModalThumbnailPlaceholder}>No Image</div>
               )}
@@ -437,28 +405,21 @@ export default function EditItemModal({
                   Annotate Image
                 </Button>
               )}
-              {annotatedImage && (
+              {extractAnnotationS3Urls(annotatedImage).length > 0 && (
                 <Button
                   type="button"
                   variant="danger"
                   icon={<Trash2 size={14} />}
-                  onClick={() => setAnnotatedImage(null)}
+                  onClick={() => {
+                    setAnnotatedImage("[]");
+                  }}
+                  title="Delete annotation from S3 (PLM image is preserved)"
                 >
-                  Delete Image
+                  Delete Annotation
                 </Button>
               )}
             </div>
           </div>
-          {!annotatedImage && plmImageUrl && (
-            <span className={styles.thumbnailInfo}>
-              Showing Style image from PLM. Click &quot;Annotate Image&quot; to draw on it.
-            </span>
-          )}
-          {!annotatedImage && !isLoadingPlmImage && !plmImageUrl && !plmImageError && (
-            <span className={styles.thumbnailInfo}>
-              No PLM image found. Drawing will fallback to default template.
-            </span>
-          )}
         </div>
 
 

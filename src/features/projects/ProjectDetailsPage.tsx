@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { FileText, RefreshCw, Trash2 } from "lucide-react";
+import { generateProjectReport } from "../../services/reportService";
 import Button from "../../components/Button";
 import Table from "../../components/Table";
 import type { ProjectDetailsPageProps, GroupedStyle } from "../../types/projects";
@@ -21,6 +22,32 @@ export default function ProjectDetailsPage({
   const { checkAndConfirm } = useNavigationBlocker();
   const details = useProjectDetails({ projectName, navigate, currentUser });
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  const handleGenerateReport = useCallback(async () => {
+    if (!details.project?.id) return;
+    setIsGeneratingReport(true);
+    try {
+      await generateProjectReport({
+        project: details.project,
+        sortedGroupedStyles: details.sortedGroupedStyles,
+        plmColorwaysMap: details.plmColorwaysMap,
+        plmImagesMap: details.plmImagesMap,
+        currentUser,
+      });
+    } catch (err) {
+      console.error('[GenerateReport] Error:', err);
+      alert('Failed to generate report. Please try again.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }, [
+    details.project,
+    details.sortedGroupedStyles,
+    details.plmColorwaysMap,
+    details.plmImagesMap,
+    currentUser,
+  ]);
 
   const columns = useProjectColumns({
     plmColorwaysMap: details.plmColorwaysMap,
@@ -109,18 +136,25 @@ export default function ProjectDetailsPage({
             <>
               <Button
                 variant="outline"
-                title="Refresh"
-                onClick={() => checkAndConfirm(details.handleRefresh)}
-                disabled={details.isLoading || details.isSyncing}
-                icon={<RefreshCw size={14} className={details.isLoading ? styles.spinning : ''} />}
+                title={isGeneratingReport ? 'Generating...' : 'Generate Report'}
+                onClick={handleGenerateReport}
+                disabled={isGeneratingReport || details.isLoading || details.isSyncing || !details.project}
+                icon={<FileText size={14} className={isGeneratingReport ? styles.spinning : ''} />}
               />
               <Button
-                variant="outline"
-                title="Clear Project"
-                onClick={() => checkAndConfirm(() => setConfirmClearOpen(true))}
-                disabled={details.isLocked || details.isSyncing || details.sortedGroupedStyles.length === 0 || details.isLoading}
-                icon={<Trash2 size={14} />}
-              />
+                  variant="outline"
+                  title="Refresh"
+                  onClick={() => checkAndConfirm(details.handleRefresh)}
+                  disabled={details.isLoading || details.isSyncing}
+                  icon={<RefreshCw size={14} className={details.isLoading ? styles.spinning : ''} />}
+                />
+              <Button
+                  variant="outline"
+                  title="Clear Project"
+                  onClick={() => checkAndConfirm(() => setConfirmClearOpen(true))}
+                  disabled={details.isLocked || details.isSyncing || details.sortedGroupedStyles.length === 0 || details.isLoading}
+                  icon={<Trash2 size={14} />}
+                />
             </>
           }
         />

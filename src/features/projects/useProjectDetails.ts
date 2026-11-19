@@ -99,8 +99,23 @@ export function useProjectDetails({
     sortedGroupedStyles,
   });
 
-  const { plmImagesMap, loadingPlmImages, plmImagesErrors, loadStyleImage } =
-    usePlmStyleImages({ sortedGroupedStyles, currentUser });
+  const {
+    plmImagesMap,
+    loadingPlmImages,
+    plmImagesErrors,
+    loadStyleImage,
+    markStyleImageDeleted,
+    resetStyleImageDeleted,
+  } = usePlmStyleImages({
+    sortedGroupedStyles,
+    currentUser,
+    projectName: project?.ProjectName,
+    onItemImageSaved: (_styleNum, _s3Url) => {
+      if (project?.id) {
+        void refreshItems(project.id);
+      }
+    },
+  });
 
   const { handleSyncProject, isSyncing } = useProjectSync({
     project,
@@ -183,17 +198,17 @@ export function useProjectDetails({
           matchingItems.map((it) =>
             it.id
               ? projectService.updateProjectItem(it.id, {
-                  styleMaterialNumber: it.styleMaterialNumber,
-                  styleMaterialName: it.styleMaterialName,
-                  colorway: it.colorway,
-                  colorwayStatus: it.colorwayStatus,
-                  colorStatusId: it.colorStatusId,
-                  selectionCondition: it.selectionCondition,
-                  sampleDue: it.sampleDue,
-                  buyerComments: it.buyerComments,
-                  internalComments: it.internalComments,
-                  annotatedImage: annotatedDataUrl,
-                })
+                styleMaterialNumber: it.styleMaterialNumber,
+                styleMaterialName: it.styleMaterialName,
+                colorway: it.colorway,
+                colorwayStatus: it.colorwayStatus,
+                colorStatusId: it.colorStatusId,
+                selectionCondition: it.selectionCondition,
+                sampleDue: it.sampleDue,
+                buyerComments: it.buyerComments,
+                internalComments: it.internalComments,
+                annotatedImage: annotatedDataUrl,
+              })
               : Promise.resolve()
           )
         );
@@ -282,19 +297,19 @@ export function useProjectDetails({
           row.items.map((item) =>
             item.id
               ? projectService.updateProjectItem(item.id, {
-                  styleId: item.styleId ?? 0,
-                  colorId: item.colorId ?? 0,
-                  colorStatusId: item.colorStatusId ?? 0,
-                  styleMaterialNumber: item.styleMaterialNumber,
-                  styleMaterialName: item.styleMaterialName,
-                  colorway: item.colorway,
-                  colorwayStatus: item.colorwayStatus,
-                  selectionCondition: newCondition,
-                  sampleDue: item.sampleDue,
-                  buyerComments: item.buyerComments || "",
-                  internalComments: item.internalComments || "",
-                  annotatedImage: item.annotatedImage,
-                })
+                styleId: item.styleId ?? 0,
+                colorId: item.colorId ?? 0,
+                colorStatusId: item.colorStatusId ?? 0,
+                styleMaterialNumber: item.styleMaterialNumber,
+                styleMaterialName: item.styleMaterialName,
+                colorway: item.colorway,
+                colorwayStatus: item.colorwayStatus,
+                selectionCondition: newCondition,
+                sampleDue: item.sampleDue,
+                buyerComments: item.buyerComments || "",
+                internalComments: item.internalComments || "",
+                annotatedImage: item.annotatedImage,
+              })
               : Promise.resolve(),
           ),
         );
@@ -330,6 +345,9 @@ export function useProjectDetails({
     if (!project?.id || items.length === 0) return;
     setIsLoading(true);
     try {
+      if (project.ProjectName) {
+        await projectService.deleteProjectImagesFromS3(project.ProjectName).catch(() => {});
+      }
       await Promise.all(
         items
           .filter((item) => item.id)
@@ -371,6 +389,8 @@ export function useProjectDetails({
     loadingPlmImages,
     plmImagesErrors,
     loadStyleImage,
+    markStyleImageDeleted,
+    resetStyleImageDeleted,
     sortColumn,
     sortDirection,
     sortedGroupedStyles,

@@ -14,6 +14,7 @@ interface AnnotationDrawerProps {
   item: ProjectItem | null;
   projectName?: string;
   onSave: (itemId: number, annotatedDataUrl: string) => Promise<void>;
+  onImageDeleted?: (styleMaterialNumber: string) => void;
   plmImageUrl: string | null;
   isLoadingPlmImage: boolean;
   plmImageError: string | null;
@@ -35,6 +36,7 @@ export default function AnnotationDrawer({
   item,
   projectName,
   onSave,
+  onImageDeleted: _onImageDeleted,
   plmImageUrl: plmImageUrlProp,
   isLoadingPlmImage: isLoadingPlmImageProp,
   plmImageError: plmImageErrorProp,
@@ -99,9 +101,10 @@ export default function AnnotationDrawer({
         }
       }
     }
-    setImages(list);
-    // Non-PLM items have no PLM original: open straight on their saved image
-    setCurrentIndex(isNotInPlm && list.length > 0 ? 1 : 0);
+    // Store annotations in `images` (excluding the permanent default PLM image)
+    const annotationsOnly = list.filter((url) => !url.includes('_default_') && !url.includes('-default-'));
+    setImages(annotationsOnly);
+    setCurrentIndex(0); // Always start on Original (PLM) image (Index 0)
   }
 
   // Track viewport changes to update menu position
@@ -304,11 +307,11 @@ export default function AnnotationDrawer({
         await projectService.deleteImageFromS3(removedImage);
       }
 
-      const serialized = updatedImages.length > 0 ? JSON.stringify(updatedImages) : '';
+      const serialized = updatedImages.length > 0 ? JSON.stringify(updatedImages) : '[]';
       await onSave(item.id, serialized);
 
       setImages(updatedImages);
-      setCurrentIndex(0); // return to Original PLM image
+      setCurrentIndex(0); // return to Original PLM image (Index 0)
 
       const fallback = formatDisplayImageUrl(plmImageUrl || DEFAULT_GARMENT_SVG);
       lastLoadedUrlRef.current = fallback;

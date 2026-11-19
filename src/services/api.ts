@@ -1,8 +1,8 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { getStoredToken } from "../auth/tokenUtils";
 import { type InforUser, type GenericLookUp } from "../types/api";
 
-const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+const defaultBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || "";
 
 export const api = axios.create({
   baseURL: defaultBaseUrl,

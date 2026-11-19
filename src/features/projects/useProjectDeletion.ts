@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { projectService, type ProjectItem } from "../../services/projectService";
 import type { TableType } from "../../types/table";
 import type { GroupedStyle } from "../../types/projects";
+import { extractAnnotationS3Urls } from "../../utils/image";
 
 import type { ToastType } from "../../hooks/useToast";
 type ShowToastFn = (message: string, type?: ToastType) => void;
@@ -54,6 +55,12 @@ export function useProjectDeletion({ project, showToast, refreshItems }: UseProj
     if (!deleteItemTarget?.id) return;
     setIsDeletingItem(true);
     try {
+      // 1. Clean up S3 annotations associated with this item
+      if (deleteItemTarget.annotatedImage) {
+        const s3Urls = extractAnnotationS3Urls(deleteItemTarget.annotatedImage);
+        await Promise.all(s3Urls.map((u) => projectService.deleteImageFromS3(u).catch(() => {})));
+      }
+
       await projectService.deleteProjectItem(deleteItemTarget.id);
       showToast("Colorway item deleted successfully");
       if (project?.id) await refreshItems(project.id);

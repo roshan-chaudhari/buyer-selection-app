@@ -275,8 +275,14 @@ export const projectService = {
     }
   },
 
-  /** Deletes an image from S3 storage */
+  /** Deletes an image from S3 storage (PLM default images are protected and can never be deleted) */
   deleteImageFromS3: async (urlOrKey: string): Promise<boolean> => {
+    if (!urlOrKey) return false;
+    // The PLM default image can never be deleted from S3, only annotations can be
+    if (urlOrKey.includes('_default_') || urlOrKey.includes('-default-')) {
+      console.warn('[projectService] Protected PLM default image from deletion:', urlOrKey);
+      return false;
+    }
     try {
       const { data } = await api.delete('/api/projects/s3-image', {
         params: { url: urlOrKey },
@@ -292,6 +298,18 @@ export const projectService = {
     try {
       const { data } = await api.delete('/api/projects/style-images', {
         params: { projectName, styleName },
+      });
+      return Boolean(data?.success);
+    } catch {
+      return false;
+    }
+  },
+
+  /** Deletes all images belonging to an entire project from S3 */
+  deleteProjectImagesFromS3: async (projectName: string): Promise<boolean> => {
+    try {
+      const { data } = await api.delete('/api/projects/project-images', {
+        params: { projectName },
       });
       return Boolean(data?.success);
     } catch {

@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npx esbuild tests/imageUtils.test.ts --bundle --platform=node --packages=external --outfile=tests/dist/imageUtils.test.mjs --format=esm && node --test tests/dist/imageUtils.test.mjs"
   },
   "dependencies": {
     "axios": "^1.18.0",
     "dotenv": "^17.4.2",
     "jsqr": "^1.4.0",
     "lucide-react": "^1.21.0",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.18.0",

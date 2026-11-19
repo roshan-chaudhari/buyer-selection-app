@@ -44,6 +44,8 @@ interface ProjectDetailsModalsProps {
   loadingPlmImages: Record<string, boolean>;
   plmImagesErrors: Record<string, string>;
   loadStyleImage: (styleMaterialNumber: string, styleId?: number) => Promise<void>;
+  markStyleImageDeleted?: (styleMaterialNumber: string) => void;
+  resetStyleImageDeleted?: (styleMaterialNumber: string) => void;
 }
 
 export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
@@ -79,6 +81,8 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
   loadingPlmImages,
   plmImagesErrors,
   loadStyleImage,
+  markStyleImageDeleted,
+  resetStyleImageDeleted: _resetStyleImageDeleted,
 }) => {
   return (
     <>
@@ -100,6 +104,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
           onClose={() => setIsAddModalOpen(false)}
           project={project}
           existingItems={items}
+          currentUser={currentUser}
           onAddStyles={handleAddStyles}
           onError={(msg) => setToast({ message: msg, type: "error" })}
         />
@@ -122,6 +127,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
           plmImageError={plmImagesErrors[selectedItem.styleMaterialNumber] || null}
           onOpenAnnotation={openAnnotation}
           onSave={handleItemSave}
+          onImageDeleted={markStyleImageDeleted}
           onError={(msg) => setToast({ message: msg, type: "error" })}
         />
       )}
@@ -172,6 +178,7 @@ export const ProjectDetailsModals: React.FC<ProjectDetailsModalsProps> = ({
           }
         }}
         onSave={handleSaveAnnotation}
+        onImageDeleted={markStyleImageDeleted}
         isLocked={isLocked}
       />
 

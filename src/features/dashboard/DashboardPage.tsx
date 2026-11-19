@@ -72,6 +72,9 @@ export default function DashboardPage({
     if (!deleteTarget?.id) return;
     setIsDeleting(true);
     try {
+      if (deleteTarget.ProjectName) {
+        await projectService.deleteProjectImagesFromS3(deleteTarget.ProjectName).catch(() => {});
+      }
       await projectService.deleteProject(deleteTarget.id, currentUser);
       setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       showToast('Project deleted successfully', 'success');
