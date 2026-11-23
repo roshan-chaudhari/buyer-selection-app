@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { FileText, RefreshCw, Trash2 } from "lucide-react";
 import { generateProjectReport } from "../../services/reportService";
 import Button from "../../components/Button";
 import Table from "../../components/Table";
@@ -136,10 +136,10 @@ export default function ProjectDetailsPage({
             <>
               <Button
                 variant="outline"
-                // title={isGeneratingReport ? 'Generating...' : 'Generate Report'}
+                title={isGeneratingReport ? 'Generating...' : 'Generate Report'}
                 onClick={handleGenerateReport}
                 disabled={isGeneratingReport || details.isLoading || details.isSyncing || !details.project}
-                // icon={<FileText size={14} className={isGeneratingReport ? styles.spinning : ''} />}
+                icon={<FileText size={14} className={isGeneratingReport ? styles.spinning : ''} />}
               />
               <Button
                   variant="outline"
