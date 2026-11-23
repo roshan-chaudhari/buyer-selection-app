@@ -134,13 +134,13 @@ export default function ProjectDetailsPage({
           isRowSelected={(row) => details.selectedItem?.styleMaterialNumber === row.styleMaterialNumber}
           searchActions={
             <>
-              <Button
+              {/* <Button
                 variant="outline"
                 title={isGeneratingReport ? 'Generating...' : 'Generate Report'}
                 onClick={handleGenerateReport}
                 disabled={isGeneratingReport || details.isLoading || details.isSyncing || !details.project}
                 icon={<FileText size={14} className={isGeneratingReport ? styles.spinning : ''} />}
-              />
+              /> */}
               <Button
                   variant="outline"
                   title="Refresh"
