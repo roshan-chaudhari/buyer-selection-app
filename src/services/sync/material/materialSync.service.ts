@@ -1,13 +1,142 @@
 import {
+  api,
   odata2material,
   fetchPlmMaterialColorways,
+  fetchPlmMaterialDetails,
   savePlmMaterialColorways,
 } from "../../api";
+import { getStoredToken } from "../../../auth/tokenUtils";
+import { computeIdGenContextValues } from "../../plmIdGeneratorPayload";
 import { buildSaveMaterialColorwayPayload } from "./materialColor.service";
 import { projectService, type ProjectItem } from "../../projectService";
 import type { GroupedStyle } from "../../../types/projects";
 import type { InforUser } from "../../../types/api";
 import { extractODataList } from "../../../utils/odata";
+
+/** autoNumberId used by the PLM ID Generator for Material */
+const MATERIAL_AUTO_NUMBER_ID = "2";
+
+const formatDateToMMDDYYYY = (dateVal?: string | Date | null) => {
+  if (!dateVal) return "";
+  const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+  if (!isNaN(d.getTime())) {
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  }
+  return typeof dateVal === "string" ? dateVal : "";
+};
+
+const toNumberOrNull = (val: unknown): number | null =>
+  val !== undefined && val !== null && val !== "" && !isNaN(Number(val)) ? Number(val) : null;
+
+async function savePlmMaterialOverview(payload: Record<string, unknown>): Promise<any> {
+  const token = getStoredToken();
+  const { data } = await api.post(
+    "/api/pdm/material/v2/save",
+    payload,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }
+  );
+  return data;
+}
+
+/**
+ * Updates the Material Overview (FreeFieldCert = Project Name, DateField1 = Project Date)
+ * following the same pattern used for the Style Overview update.
+ */
+async function updateMaterialOverviewAfterSync(params: {
+  materialId: number | string;
+  projectId: number;
+  materialNode: Record<string, any>;
+  currentUser: InforUser;
+}): Promise<void> {
+  const { materialId, projectId, materialNode, currentUser } = params;
+
+  try {
+    // 1. Resolve current project data (Project Name / Project Date)
+    const projects = await projectService.getAllProjects();
+    const project = projects.find((p) => Number(p.id) === Number(projectId));
+    if (!project) {
+      console.warn(`[MaterialSync] Project ${projectId} not found. Skipping Material Overview update.`);
+      return;
+    }
+    const projectNameVal = project.ProjectName || "";
+    const projectDateVal = formatDateToMMDDYYYY(project.SelectionDate);
+
+    // 2. Fetch latest material details to get the current RowVersionText
+    const materialDetails = (await fetchPlmMaterialDetails(materialId, currentUser)) ?? {};
+    const details: Record<string, any> = { ...materialNode, ...materialDetails };
+
+    const rowVersionText = String(details.RowVersionText || details.rowVersionText || "");
+    if (!rowVersionText) {
+      console.warn(`[MaterialSync] RowVersionText not found for MaterialId ${materialId}. Skipping Material Overview update.`);
+      return;
+    }
+
+    // 3. Generate idGenContextVal and idGenContextVal2 (same logic as Style Overview)
+    let idGenContextVal = '[""]';
+    let idGenContextVal2 = "[]";
+    try {
+      const res = await computeIdGenContextValues({
+        autoNumberId: MATERIAL_AUTO_NUMBER_ID,
+        schema: currentUser.activeSchema,
+        styleData: {
+          MainCategoryId: toNumberOrNull(details.MainCategoryId),
+          CategoryId: toNumberOrNull(details.CategoryId),
+          SeasonId: toNumberOrNull(details.SeasonId),
+          BrandId: toNumberOrNull(details.BrandId),
+          CollectionId: toNumberOrNull(details.CollectionId),
+          DivisionId: toNumberOrNull(details.DivisionId),
+        },
+      });
+      idGenContextVal = res.newContextFieldValue;
+      idGenContextVal2 = res.newContextFieldValue2;
+    } catch (genErr) {
+      console.error("[MaterialSync] Failed to generate ID Gen context values:", genErr);
+    }
+
+    // 4. Build field values
+    const fieldValues = [
+      { FieldName: "FreeFieldCert", Value: projectNameVal },
+      { FieldName: "DateField1", Value: projectDateVal },
+      { FieldName: "MaterialCode", Value: details.MaterialCode || "" },
+      { FieldName: "MaterialName", Value: details.MaterialName || "" },
+    ];
+
+    // 5. Construct complete payload
+    const userIdVal = String(currentUser.userId);
+    const payload = {
+      Key: Number(materialId),
+      userId: userIdVal,
+      notificationMessageKey: "UPDATED_MATERIAL_OVERVIEW",
+      RowVersionText: rowVersionText,
+      ModifyId: userIdVal,
+      FieldValues: fieldValues,
+      SubEntities: [],
+      ModuleId: Number(materialId),
+      idGenContextVal,
+      idGenContextVal2,
+      idGenVal: [],
+      locale: "en-US",
+      cultureInfos: [],
+      auditValues: [],
+      Schema: currentUser.activeSchema,
+    };
+
+    // console.log(
+    //   `[MaterialSync] Material Overview save request (MaterialId ${materialId}):`,
+    //   JSON.stringify(payload, null, 2),
+    // );
+
+    await savePlmMaterialOverview(payload);
+    // console.log(`[MaterialSync] Material Overview saved (MaterialId ${materialId})`);
+  } catch (err) {
+    console.error(`[MaterialSync] Failed to update Material Overview for MaterialId ${materialId}:`, err);
+  }
+}
 
 export const materialSyncService = {
   processMaterialGroup: async (
@@ -60,6 +189,14 @@ export const materialSyncService = {
 
       await savePlmMaterialColorways(saveColorwayPayload as any);
     }
+
+    // 3.5 Update Material Overview after colorway update completes
+    await updateMaterialOverviewAfterSync({
+      materialId: sourceMaterialId,
+      projectId,
+      materialNode,
+      currentUser,
+    });
 
     // 4. Upload annotated image to Material (if present) - Commented out per requirements (no image update for Material)
     /*

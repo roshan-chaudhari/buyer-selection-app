@@ -24,8 +24,11 @@ export default function ProjectDetailsPage({
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
+  // Report can only be generated when the current project has at least one item
+  const hasProjectItems = details.sortedGroupedStyles.length > 0;
+
   const handleGenerateReport = useCallback(async () => {
-    if (!details.project?.id) return;
+    if (!details.project?.id || !hasProjectItems) return;
     setIsGeneratingReport(true);
     try {
       await generateProjectReport({
@@ -47,6 +50,7 @@ export default function ProjectDetailsPage({
     details.plmColorwaysMap,
     details.plmImagesMap,
     currentUser,
+    hasProjectItems,
   ]);
 
   const columns = useProjectColumns({
@@ -138,7 +142,7 @@ export default function ProjectDetailsPage({
                 variant="outline"
                 title={isGeneratingReport ? 'Generating...' : 'Generate Report'}
                 onClick={handleGenerateReport}
-                disabled={isGeneratingReport || details.isLoading || details.isSyncing || !details.project}
+                disabled={isGeneratingReport || details.isLoading || details.isSyncing || !details.project || !hasProjectItems}
                 icon={<FileText size={14} className={isGeneratingReport ? styles.spinning : ''} />}
               />
               <Button
